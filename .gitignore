@@ -1,0 +1,24 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+/app/build/
+/app/release/
+*.apk
+*.aab
+*.keystore
+
+# The release keystore IS committed on purpose. Every APK must be signed with the
+# same key or Android refuses to update an installed app in place — so it lives
+# in the repo rather than in a secret that can silently go missing. Private repo;
+# the password is documented in app/build.gradle.kts.
+!credentials/gt7.keystore
+
+# Kotlin compiler build artifacts
+.kotlin/
