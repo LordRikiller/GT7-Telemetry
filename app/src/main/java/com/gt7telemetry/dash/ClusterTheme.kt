@@ -65,7 +65,7 @@ enum class DashLayout(
         c(0xFFFF5A5F), c(0xFFFF3B30), c(0xFFFF3B30), c(0xFF4AD07A), c(0xFF0D1730), c(0xFFE8ECF4), c(0xFFFF5A5F),
         ring = c(0xFF6A7793))),
 
-    FORMULA1("Formula 1", null, LayoutFamily.BAR, ClusterTheme(
+    FORMULA1("Formula 1", "Super Formula (Dallara)", LayoutFamily.BAR, ClusterTheme(
         c(0xFF050506), c(0xFF101014), c(0xFF1A1A1F), c(0xFFFFFFFF), c(0xFFB7B7BD), c(0xFF7A7A82),
         c(0xFF00E078), c(0xFFFFFFFF), c(0xFFFF2B2B), c(0xFF00E078), c(0xFF101014), c(0xFFFFFFFF), c(0xFFFFFFFF))),
 
@@ -264,7 +264,76 @@ enum class DashLayout(
     GT_VGT("Gran Turismo VGT", "Gran Turismo", LayoutFamily.DIGITAL_RING, ClusterTheme(
         c(0xFF10141F), c(0xFF161B29), c(0xFF27304A), c(0xFFF1F4FA), c(0xFFA9B3CA), c(0xFF7985A1),
         c(0xFF2D6BFF), c(0xFFE62E32), c(0xFFE62E32), c(0xFF3BD98A), c(0xFF131828), c(0xFFEBEFF8), c(0xFF2D6BFF),
-        warn = c(0xFFFFD23D)));
+        warn = c(0xFFFFD23D))),
+
+    // --- v0.4.0: full-catalog coverage --------------------------------------
+    // Twelve more marques, closing out every manufacturer in the 575-car
+    // catalog (the rest fold into these via the alias table below).
+
+    // AFEELA 1: Sony's panoramic media bar — calm violet on cool graphite.
+    AFEELA("AFEELA 1", "AFEELA", LayoutFamily.MINIMAL, ClusterTheme(
+        c(0xFF0C0D12), c(0xFF15161E), c(0xFF262838), c(0xFFF1F2F8), c(0xFFACAFC2), c(0xFF7B7F95),
+        c(0xFF8A7CFF), c(0xFF8A7CFF), c(0xFFFF4D5E), c(0xFF35D07F), c(0xFF15161E), c(0xFFF1F2F8), c(0xFFF1F2F8))),
+
+    // BAC Mono: single-seater motorsport LCD, black and surgical white.
+    BAC_MONO("BAC Mono", "BAC", LayoutFamily.BAR, ClusterTheme(
+        c(0xFF070708), c(0xFF111113), c(0xFF1D1D21), c(0xFFFBFBFC), c(0xFFB3B3BA), c(0xFF7A7A82),
+        c(0xFFE8E9EC), c(0xFFFBFBFC), c(0xFFFF2B2B), c(0xFF00D68F), c(0xFF111113), c(0xFFFBFBFC), c(0xFFFBFBFC))),
+
+    // GT by Citroën: sci-fi cockpit, chevron red on gloss black.
+    CITROEN_GT("GT by Citroën", "Citroen", LayoutFamily.DIGITAL_RING, ClusterTheme(
+        c(0xFF0B0A0B), c(0xFF141215), c(0xFF262128), c(0xFFF4F1F5), c(0xFFB2ABB5), c(0xFF7D7681),
+        c(0xFFDA291C), c(0xFFDA291C), c(0xFFDA291C), c(0xFF3BD98A), c(0xFF110F12), c(0xFFEFEBF1), c(0xFFDA291C),
+        warn = c(0xFFFFD23D))),
+
+    // DMC DeLorean: brushed stainless, black faces, the orange-tipped needles.
+    DMC_DELOREAN("DMC DeLorean", "DMC", LayoutFamily.OFFSET, ClusterTheme(
+        c(0xFF141517), c(0xFF1D1F22), c(0xFF33363B), c(0xFFEDEEF0), c(0xFFADB0B5), c(0xFF7C8087),
+        c(0xFFFF8A00), c(0xFFFF8A00), c(0xFFE24A2E), c(0xFF3BD98A), c(0xFF101113), c(0xFFDADCE0), c(0xFFFF8A00),
+        ring = c(0xFF8D939C))),
+
+    // Jeep: olive drab, amber backlight, chunky utilitarian tiles.
+    JEEP("Jeep", "Jeep", LayoutFamily.TILES, ClusterTheme(
+        c(0xFF121510), c(0xFF1A1F16), c(0xFF2E3626), c(0xFFF0EFE4), c(0xFFB9BBA4), c(0xFF848873),
+        c(0xFFFFB300), c(0xFFFFB300), c(0xFFE24A2E), c(0xFF7BAE5E), c(0xFF161A12), c(0xFFEBEADF), c(0xFFFFB300))),
+
+    // KTM X-Bow: ready-to-race orange on carbon black.
+    KTM_XBOW("KTM X-Bow", "KTM", LayoutFamily.MINIMAL, ClusterTheme(
+        c(0xFF0A0A0B), c(0xFF131314), c(0xFF202023), c(0xFFF5F5F6), c(0xFFB0B0B5), c(0xFF7A7A80),
+        c(0xFFFF6600), c(0xFFFF6600), c(0xFFFF3B30), c(0xFF35D07F), c(0xFF131314), c(0xFFF5F5F6), c(0xFFFF6600))),
+
+    // Opel Motorsport: signal yellow on anthracite.
+    OPEL("Opel", "Opel", LayoutFamily.DEFAULT, ClusterTheme(
+        c(0xFF0E0F10), c(0xFF171819), c(0xFF28292B), c(0xFFF3F4F4), c(0xFFAEB0B1), c(0xFF7C7E80),
+        c(0xFFF7E600), c(0xFFF7E600), c(0xFFFF3B30), c(0xFF3BD98A), c(0xFF141516), c(0xFFEFF0F0), c(0xFFF7E600))),
+
+    // Radical SR3: bare track-day LCD, red on silver-grey.
+    RADICAL("Radical SR3", "Radical", LayoutFamily.BAR, ClusterTheme(
+        c(0xFF0B0B0C), c(0xFF141416), c(0xFF232326), c(0xFFF2F2F4), c(0xFFB4B5BA), c(0xFF7C7D84),
+        c(0xFFD8261C), c(0xFFF2F2F4), c(0xFFD8261C), c(0xFF00D68F), c(0xFF141416), c(0xFFF2F2F4), c(0xFFF2F2F4))),
+
+    // TVR Tuscan: machined-aluminium oddball dash, TVR purple.
+    TVR_TUSCAN("TVR Tuscan", "TVR", LayoutFamily.FIVE_DIAL, ClusterTheme(
+        c(0xFF0D0C10), c(0xFF161419), c(0xFF2A2730), c(0xFFF1EFF4), c(0xFFB2ADBB), c(0xFF7E7889),
+        c(0xFF8E5AE8), c(0xFFCFCAD8), c(0xFFE24A2E), c(0xFF3BD98A), c(0xFF121014), c(0xFFE9E5EF), c(0xFF8E5AE8))),
+
+    // Volvo: calm Swedish twins, amber needles, Polestar-blue OK states.
+    VOLVO("Volvo", "Volvo", LayoutFamily.TWIN, ClusterTheme(
+        c(0xFF0D0E0F), c(0xFF161718), c(0xFF28292B), c(0xFFF1F2F2), c(0xFFAFB1B2), c(0xFF7C7F81),
+        c(0xFFFFA000), c(0xFFFFA000), c(0xFFE24A2E), c(0xFF54B0E3), c(0xFF121314), c(0xFFECEDEE), c(0xFFFFA000),
+        ring = c(0xFF4A4E53))),
+
+    // Xiaomi SU7 Ultra: HyperOS dark cockpit, Xiaomi orange with cyan.
+    XIAOMI_SU7("Xiaomi SU7 Ultra", "Xiaomi", LayoutFamily.DIGITAL_RING, ClusterTheme(
+        c(0xFF0B0C0F), c(0xFF141619), c(0xFF25282E), c(0xFFF2F3F5), c(0xFFACB0B7), c(0xFF7B7F87),
+        c(0xFFFF6900), c(0xFFFF6900), c(0xFFFF3B30), c(0xFF00C8D7), c(0xFF111215), c(0xFFECEEF1), c(0xFFFF6900),
+        warn = c(0xFFFFD23D))),
+
+    // Yangwang U9: quad-motor hypercar EV, jade green on graphite.
+    YANGWANG_U9("Yangwang U9", "Yangwang", LayoutFamily.CENTRAL, ClusterTheme(
+        c(0xFF0B0E0D), c(0xFF141817), c(0xFF252C2A), c(0xFFF0F4F2), c(0xFFAAB6B1), c(0xFF7A8781),
+        c(0xFF00A98F), c(0xFF00A98F), c(0xFFE24A2E), c(0xFF00A98F), c(0xFF101413), c(0xFFEAEFEC), c(0xFF00A98F),
+        ring = c(0xFF3C4A45)));
 
     companion object {
         /** Everything the manual picker lists, default first. */
@@ -282,11 +351,35 @@ enum class DashLayout(
             "nismo" to "nissan",
             "mine's" to "nissan",
             "infiniti" to "nissan",
+            "amuse" to "nissan",
+            "greddy" to "nissan",
             "shelby" to "ford",
+            "greening auto company" to "ford",
             "srt" to "dodge",
+            "plymouth" to "dodge",
             "ruf" to "porsche",
             "autobianchi" to "abarth",
+            "fiat" to "abarth",
             "daihatsu" to "suzuki",
+            // GM stable and the hot-rod shops building on GM metal.
+            "pontiac" to "chevrolet",
+            "chaparral" to "chevrolet",
+            "chris holstrom concepts" to "chevrolet",
+            "roadster shop" to "chevrolet",
+            "wicked fabrication" to "chevrolet",
+            "eckert's rod & custom" to "chevrolet",
+            "re amemiya" to "mazda",
+            // The Pantera's dash is a wall of black Veglia dials — the same
+            // instrument language as the Delta Integrale cluster.
+            "de tomaso" to "lancia",
+            "garage rcr" to "honda",
+            "skoda" to "volkswagen",
+            "ds automobiles" to "citroen",
+            "polestar" to "volvo",
+            // Design-house Vision GT one-offs wear the Gran Turismo cluster.
+            "bvlgari" to "gran turismo",
+            "italdesign" to "gran turismo",
+            "zagato" to "gran turismo",
         )
 
         /** AUTO mode: pick the layout for a catalog manufacturer, else null. */
