@@ -82,14 +82,20 @@ private fun PortraitCluster(data: ClusterData, theme: ClusterTheme, layout: Dash
                     }
                     Lab("${data.rpm} / ${data.rpmMax} RPM", theme)
                 }
+                // Analog families keep their marque's hero dial — the speedo
+                // for speed-hero layouts (Mini, Bugatti), the tach otherwise —
+                // and everything else drops to the digital cards below.
                 else -> Dial(
                     Modifier.fillMaxSize(),
-                    gauge = { RadialGauge(data.rpm / 1000f, tachMax(data), theme, Modifier.fillMaxSize(), redline = tachRedline(data), bezel = true) },
+                    gauge = {
+                        if (layout.heroSpeed) RadialGauge(data.speed.toFloat(), layout.spdMax.toFloat(), theme, Modifier.fillMaxSize(), majorStep = layout.spdMax / 6f, bezel = true)
+                        else RadialGauge(data.rpm / 1000f, tachMax(data), theme, Modifier.fillMaxSize(), redline = tachRedline(data), bezel = true)
+                    },
                     center = {
                         Num(data.gear, theme, 52, color = theme.dialGear, weight = FontWeight.Black)
                         GearHint(data, theme)
-                        Num("${data.speed}", theme, 22, color = theme.dialText)
-                        Lab(data.speedUnit, theme)
+                        Num(if (layout.heroSpeed) "${data.rpm}" else "${data.speed}", theme, 22, color = theme.dialText)
+                        Lab(if (layout.heroSpeed) "rpm" else data.speedUnit, theme)
                     })
             }
         }

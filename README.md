@@ -50,8 +50,9 @@ drive. Both landscape and portrait have full layouts.
 - Status flags when the game reports them: **TCS active, handbrake,
   rev limiter**.
 
-**Clusters.** The instrument is drawn from 20 marque-styled layouts across
-9 gauge families. In **Auto** (the default) the app recognises the car
+**Clusters.** The instrument is drawn from 40 marque-styled layouts across
+9 gauge families, each modelled on the manufacturer’s top-of-the-line
+dashboard — a 992 GT3 RS, a Mustang GTD, a GR010 Hybrid, a 787B … In **Auto** (the default) the app recognises the car
 you're driving from its self-refreshing catalog and picks a matching
 cluster — jump from a GT-R into a Porsche and the dash follows. **Manual**
 keeps whichever layout you choose.
@@ -95,7 +96,7 @@ picks up mid-race without missing a beat.
   each car's real rev-limiter (GT7 broadcasts it), estimated live lap +
   last/best/delta, tyre-temperature pods, fuel/oil/boost, shift lights.
   Auto-selects a per-marque cluster (Ferrari, Porsche, GT-R, …) from the
-  car you're driving, or pick one manually — same 20 layouts as the FH6 app.
+  car you're driving, or pick one manually — 40 marque layouts.
 
 ## Project layout
 
@@ -107,7 +108,7 @@ app/src/main/java/com/gt7telemetry/
 ├── TelemetryService.kt     Foreground service: UDP 33740, heartbeats, receive loop
 ├── MainActivity.kt         Service start, keep-screen-on, notif permission, Compose host
 ├── car/CarCatalog.kt       CarCode -> name/manufacturer (assets/gt7_car_catalog.json)
-├── dash/                   The cluster engine (9 families × 20 marque themes)
+├── dash/                   The cluster engine (9 families × 40 marque themes)
 ├── settings/               DataStore prefs: PS5 IP, dash mode/layout, units
 ├── update/                 In-app updater (manifest check → download → install)
 └── ui/                     Compose dashboard, settings screen, theme, formatting
