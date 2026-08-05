@@ -50,12 +50,21 @@ drive. Both landscape and portrait have full layouts.
 - Status flags when the game reports them: **TCS active, handbrake,
   rev limiter**.
 
-**Clusters.** The instrument is drawn from 40 marque-styled layouts across
-9 gauge families, each modelled on the manufacturer’s top-of-the-line
-dashboard — a 992 GT3 RS, a Mustang GTD, a GR010 Hybrid, a 787B … In **Auto** (the default) the app recognises the car
-you're driving from its self-refreshing catalog and picks a matching
+**Clusters.** The instrument is drawn from 52 marque-styled layouts across
+9 gauge families, each modelled on the manufacturer's top-of-the-line
+dashboard — a 992 GT3 RS, a Mustang GTD, a GR010 Hybrid, a 787B … Every
+manufacturer in the 575-car catalog resolves to one, directly or via an
+alias (tuners map to their base marque, the VGT design houses to the Gran
+Turismo cluster). In **Auto** (the default) the app recognises the car
+you're driving from its self-refreshing catalog and picks the matching
 cluster — jump from a GT-R into a Porsche and the dash follows. **Manual**
 keeps whichever layout you choose.
+
+**Browse them all:** [docs/clusters.html](docs/clusters.html) renders every
+layout with the app's exact colours and gauge geometry
+([live preview](https://htmlpreview.github.io/?https://github.com/LordRikiller/GT7-Telemetry/blob/main/docs/clusters.html)).
+The page is generated — run `python3 tools/gen_showcase.py` after adding a
+layout so it never drifts from the code.
 
 **The ⚙ button** (top of the dash) opens Settings:
 
@@ -96,7 +105,7 @@ picks up mid-race without missing a beat.
   each car's real rev-limiter (GT7 broadcasts it), estimated live lap +
   last/best/delta, tyre-temperature pods, fuel/oil/boost, shift lights.
   Auto-selects a per-marque cluster (Ferrari, Porsche, GT-R, …) from the
-  car you're driving, or pick one manually — 40 marque layouts.
+  car you're driving, or pick one manually — 52 marque layouts.
 
 ## Project layout
 
@@ -108,12 +117,14 @@ app/src/main/java/com/gt7telemetry/
 ├── TelemetryService.kt     Foreground service: UDP 33740, heartbeats, receive loop
 ├── MainActivity.kt         Service start, keep-screen-on, notif permission, Compose host
 ├── car/CarCatalog.kt       CarCode -> name/manufacturer (assets/gt7_car_catalog.json)
-├── dash/                   The cluster engine (9 families × 40 marque themes)
+├── dash/                   The cluster engine (9 families × 52 marque themes)
 ├── settings/               DataStore prefs: PS5 IP, dash mode/layout, units
 ├── update/                 In-app updater (manifest check → download → install)
 └── ui/                     Compose dashboard, settings screen, theme, formatting
 
 app/src/test/java/com/gt7telemetry/   Salsa20 + packet-offset tests (JVM, no device)
+docs/clusters.html                    Generated showcase of every cluster layout
+tools/gen_showcase.py                 Regenerates the showcase from ClusterTheme.kt
 infra/update-worker/                  Cloudflare Worker behind the update endpoint
 ```
 
