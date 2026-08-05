@@ -11,15 +11,16 @@ namespace (`47e2996d1a5c4a738f4322af7e080304`):
 This mirrors the FH6 Telemetry update setup exactly (`fh6-updates` worker).
 
 The worker is **already deployed and serving** (first published manually on
-2026-08-05 with v0.2.0 in KV). The release workflow
-(`.github/workflows/release.yml`) re-deploys it idempotently and pushes each
-release's APK + manifest into KV. It authenticates with either repo secret:
+2026-08-05 with v0.2.0 in KV) — same as `fh6-updates`, the worker itself is
+managed outside CI with the commands below.
 
-- `CF_API_TOKEN` — a scoped token with **Workers Scripts:Edit** +
-  **Workers KV Storage:Edit** on the Rik account, or
-- `CF_AUTH_EMAIL` + `CF_AUTH_KEY` — the Cloudflare Global API Key pair.
-
-Until one is set, the publish step no-ops and releases still land on GitHub.
+The release workflow (`.github/workflows/release.yml`) pushes each release's
+APK + manifest into KV, exactly like the FH6-Telemetry repo: it authenticates
+with the `CF_API_TOKEN` repo secret — a **Workers KV Storage:Edit** token on
+the Rik account. That token's scope covers every KV namespace on the account,
+so the **same token value used in FH6-Telemetry works here** — add it as
+`CF_API_TOKEN` in this repo's Actions secrets. Until it's set, the publish
+step no-ops and releases still land on GitHub.
 
 Manual deploy, if ever needed:
 

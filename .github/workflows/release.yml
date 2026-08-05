@@ -174,54 +174,32 @@ jobs:
           generate_release_notes: true
           files: gt7-telemetry-${{ steps.ver.outputs.name }}.apk
 
-      # Keep the update endpoint's worker in sync with the committed source
-      # (infra/update-worker/) and publish the signed APK + manifest to its KV
-      # so the in-app updater (UpdateChecker.MANIFEST_URL) offers this release.
-      #
-      # Auth: either secret works —
-      #   CF_API_TOKEN                (scoped token: Workers Scripts:Edit +
-      #                                Workers KV Storage:Edit on the Rik account)
-      #   CF_AUTH_EMAIL + CF_AUTH_KEY (the Cloudflare Global API Key pair)
-      # Account and namespace IDs are not secret; only the credentials are.
-      # With neither secret set the step no-ops, so releases keep working.
+      # Push the signed APK + manifest to the Cloudflare Worker's KV so the
+      # in-app updater (UpdateChecker.MANIFEST_URL) offers it. Account and
+      # namespace IDs are not secret; only the token is. The step no-ops until
+      # the CF_API_TOKEN secret (a "Workers KV Storage:Edit" token on the Rik
+      # account — the SAME token the FH6-Telemetry repo uses, its scope covers
+      # every KV namespace on the account) is set, so releases keep working
+      # without it. The worker itself is deployed once, outside CI — see
+      # infra/update-worker/.
       - name: Publish update to the in-app update endpoint
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CF_AUTH_EMAIL: ${{ secrets.CF_AUTH_EMAIL }}
-          CF_AUTH_KEY: ${{ secrets.CF_AUTH_KEY }}
           CF_ACCOUNT_ID: "535cbeaa83ca309dd532ff386358e08f"
           CF_KV_NAMESPACE: "47e2996d1a5c4a738f4322af7e080304"
           VN: ${{ steps.ver.outputs.name }}
           VC: ${{ steps.ver.outputs.code }}
         run: |
-          if [ -n "$CF_API_TOKEN" ]; then
-            AUTH=(-H "Authorization: Bearer $CF_API_TOKEN")
-          elif [ -n "$CF_AUTH_KEY" ] && [ -n "$CF_AUTH_EMAIL" ]; then
-            AUTH=(-H "X-Auth-Email: $CF_AUTH_EMAIL" -H "X-Auth-Key: $CF_AUTH_KEY")
-          else
-            echo "No Cloudflare credentials set (CF_API_TOKEN or CF_AUTH_EMAIL+CF_AUTH_KEY) — skipping update-endpoint publish."
+          if [ -z "$CF_API_TOKEN" ]; then
+            echo "CF_API_TOKEN not set — skipping update-endpoint publish."
             exit 0
           fi
-
-          WORKERS="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers"
-          RESP=$(curl -sS -X PUT "$WORKERS/scripts/gt7-updates" "${AUTH[@]}" \
-            -F "metadata=@infra/update-worker/metadata.json;type=application/json" \
-            -F "worker.js=@infra/update-worker/worker.js;type=application/javascript+module")
-          if echo "$RESP" | jq -e '.success' >/dev/null; then
-            # Make sure the workers.dev route is on so the manifest URL resolves.
-            curl -sS -X POST "$WORKERS/scripts/gt7-updates/subdomain" "${AUTH[@]}" \
-              -H "Content-Type: application/json" --data '{"enabled":true}' >/dev/null || true
-            echo "Worker deployed."
-          else
-            echo "::warning::Worker deploy failed (credentials may lack Workers Scripts:Edit): $RESP"
-          fi
-
-          KV="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$CF_KV_NAMESPACE/values"
-          curl -fsS -X PUT "$KV/apk" "${AUTH[@]}" \
+          BASE="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$CF_KV_NAMESPACE/values"
+          curl -fsS -X PUT "$BASE/apk" -H "Authorization: Bearer $CF_API_TOKEN" \
             -H "Content-Type: application/octet-stream" \
             --data-binary "@gt7-telemetry-${VN}.apk" >/dev/null
           MANIFEST=$(jq -nc --argjson vc "$VC" --arg vn "$VN" \
             '{versionCode:$vc, versionName:$vn, apkUrl:"https://gt7-updates.fh6rik.workers.dev/app.apk", notes:("Release " + $vn)}')
-          curl -fsS -X PUT "$KV/manifest" "${AUTH[@]}" \
+          curl -fsS -X PUT "$BASE/manifest" -H "Authorization: Bearer $CF_API_TOKEN" \
             -H "Content-Type: text/plain" --data-raw "$MANIFEST" >/dev/null
           echo "Published v$VN (code $VC) to the update endpoint."
