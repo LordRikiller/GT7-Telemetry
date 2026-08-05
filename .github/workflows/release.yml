@@ -1,0 +1,205 @@
+name: Release APK
+
+# Cut a release by pushing a semver tag, e.g.:
+#   git tag v0.1.0 && git push origin v0.1.0
+# or run manually from the Actions tab (provide the version, e.g. 0.1.0).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g. 0.1.0)"
+        required: true
+        default: "0.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Caches the Gradle distribution, resolved dependencies and the build
+      # cache. Keyed on the version catalog + build scripts, which is what
+      # determines the dependency graph.
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', '**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Derive version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VN="${{ github.event.inputs.version }}"
+          else
+            VN="${GITHUB_REF_NAME#v}"
+          fi
+          IFS=. read -r MAJ MIN PAT <<< "$VN"
+          VC=$(( ${MAJ:-0} * 10000 + ${MIN:-0} * 100 + ${PAT:-0} ))
+          echo "name=$VN"  >> "$GITHUB_OUTPUT"
+          echo "code=$VC"  >> "$GITHUB_OUTPUT"
+          echo "tag=v$VN"  >> "$GITHUB_OUTPUT"
+          echo "Building version $VN (code $VC)"
+
+      # On a manual dispatch nothing stops you naming a version whose tag already
+      # exists. The release action then attaches the new APK to the OLD tag, so
+      # the release points at a commit that cannot have produced the artifact.
+      # A *draft* release has no git tag yet, so the tag check below cannot see
+      # it. Publishing one creates the tag at the draft's target_commitish —
+      # which defaults to the repository's default branch, not the commit being
+      # built. Fail instead.
+      - name: Reject a version that already has a release (including drafts)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          MATCH=$(curl -sS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | jq -r --arg t "$TAG" \
+                '.[] | select(.tag_name == $t)
+                     | "id=\(.id) draft=\(.draft) target=\(.target_commitish)"')
+          if [ -n "$MATCH" ]; then
+            echo "::error::A release already exists for $TAG — $MATCH. Publishing would attach this build to it and tag at its target, not at $GITHUB_SHA. Delete that release (and any tag) or pick a new version."
+            exit 1
+          fi
+          echo "No existing release for $TAG."
+
+      - name: Reject a tag that already exists elsewhere
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          REFS=$(git ls-remote --tags origin || true)
+          EXISTING=$(echo "$REFS" | awk -v t="refs/tags/$TAG"     '$2 == t {print $1}')
+          if [ -z "$EXISTING" ]; then
+            echo "Tag $TAG is free."
+            exit 0
+          fi
+          # An annotated tag's ref points at a tag object; the commit it wraps is
+          # published as the peeled "^{}" ref. Match on the full listing —
+          # passing "^{}" as an ls-remote pattern silently matches nothing.
+          PEELED=$(echo "$REFS" | awk -v t="refs/tags/$TAG^{}" '$2 == t {print $1}')
+          TARGET="${PEELED:-$EXISTING}"
+          if [ "$TARGET" = "$GITHUB_SHA" ]; then
+            echo "Tag $TAG already points at this commit — re-running is fine."
+            exit 0
+          fi
+          echo "::error::Tag $TAG already exists and points at $TARGET, not $GITHUB_SHA. Publishing would attach this build to a different commit. Pick a new version, or delete the tag first."
+          exit 1
+
+      # assembleRelease, not assembleDebug. A debug build is signed with a
+      # keystore the runner generates on demand, so its key differs per run —
+      # meaning no release could ever update an installed one in place, and the
+      # in-app updater could never work. It is also marked debuggable.
+      - name: Build APK
+        env:
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+          VERSION_CODE: ${{ steps.ver.outputs.code }}
+          # Empty values fall through to the defaults in app/build.gradle.kts.
+          GT7_KEYSTORE_PASSWORD: ${{ secrets.GT7_KEYSTORE_PASSWORD }}
+          GT7_KEY_ALIAS: ${{ secrets.GT7_KEY_ALIAS }}
+          GT7_KEY_PASSWORD: ${{ secrets.GT7_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon --build-cache
+
+      # An APK signed with the wrong key can never update an installed app, and
+      # the failure is invisible until a user tries. Prove the APK carries the
+      # certificate of the keystore we intended to sign with, by fingerprint
+      # rather than by certificate name.
+      - name: Verify signature
+        env:
+          KS_PASS: ${{ secrets.GT7_KEYSTORE_PASSWORD || 'gt7telemetry' }}
+          KS_ALIAS: ${{ secrets.GT7_KEY_ALIAS || 'gt7' }}
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "::error::No APK at $APK"; exit 1; }
+          APKSIGNER=$(ls -1 "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          test -n "$APKSIGNER" || { echo "::error::apksigner not found in $ANDROID_HOME"; exit 1; }
+
+          norm() { tr -d ':' | tr 'A-Z' 'a-z'; }
+          APK_FP=$("$APKSIGNER" verify --print-certs "$APK" \
+            | grep -m1 -i 'SHA-256 digest' | awk '{print $NF}' | norm)
+          KEY_FP=$(keytool -list -v -keystore credentials/gt7.keystore \
+            -storepass "$KS_PASS" -alias "$KS_ALIAS" 2>/dev/null \
+            | grep -m1 'SHA256:' | awk '{print $2}' | norm)
+
+          echo "APK certificate: ${APK_FP:-<none>}"
+          echo "Keystore key:    ${KEY_FP:-<none>}"
+          "$APKSIGNER" verify --print-certs "$APK" | grep -m1 'certificate DN' || true
+
+          if [ -z "$APK_FP" ] || [ -z "$KEY_FP" ]; then
+            echo "::error::Could not read a certificate fingerprint from the APK or the keystore."
+            exit 1
+          fi
+          if [ "$APK_FP" != "$KEY_FP" ]; then
+            echo "::error::APK is not signed with the expected keystore — installed apps could not update. Refusing to publish."
+            exit 1
+          fi
+          echo "Signature matches the release keystore."
+
+          cp "$APK" "gt7-telemetry-${{ steps.ver.outputs.name }}.apk"
+          ls -lh "gt7-telemetry-${{ steps.ver.outputs.name }}.apk"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          # Pin the tag to the commit that produced this APK. Without it GitHub
+          # creates the tag on the repository's default branch, so the release
+          # can point at code that could not have built the attached artifact.
+          target_commitish: ${{ github.sha }}
+          name: GT7 Telemetry ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          files: gt7-telemetry-${{ steps.ver.outputs.name }}.apk
+
+      # Push the signed APK + manifest to the Cloudflare Worker's KV so the
+      # in-app updater (UpdateChecker.MANIFEST_URL) offers it. Account and
+      # namespace IDs are not secret; only the token is. The step no-ops until
+      # the CF_API_TOKEN secret (a "Workers KV Storage:Edit" token on the Rik
+      # account — the SAME token the FH6-Telemetry repo uses, its scope covers
+      # every KV namespace on the account) is set, so releases keep working
+      # without it. The worker itself is deployed once, outside CI — see
+      # infra/update-worker/.
+      - name: Publish update to the in-app update endpoint
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: "535cbeaa83ca309dd532ff386358e08f"
+          CF_KV_NAMESPACE: "47e2996d1a5c4a738f4322af7e080304"
+          VN: ${{ steps.ver.outputs.name }}
+          VC: ${{ steps.ver.outputs.code }}
+        run: |
+          if [ -z "$CF_API_TOKEN" ]; then
+            echo "CF_API_TOKEN not set — skipping update-endpoint publish."
+            exit 0
+          fi
+          BASE="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$CF_KV_NAMESPACE/values"
+          curl -fsS -X PUT "$BASE/apk" -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@gt7-telemetry-${VN}.apk" >/dev/null
+          MANIFEST=$(jq -nc --argjson vc "$VC" --arg vn "$VN" \
+            '{versionCode:$vc, versionName:$vn, apkUrl:"https://gt7-updates.fh6rik.workers.dev/app.apk", notes:("Release " + $vn)}')
+          curl -fsS -X PUT "$BASE/manifest" -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: text/plain" --data-raw "$MANIFEST" >/dev/null
+          echo "Published v$VN (code $VC) to the update endpoint."
