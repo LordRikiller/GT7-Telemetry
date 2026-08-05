@@ -24,6 +24,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Fail in seconds, not after a five-minute build, when the update-endpoint
+      # token can't publish. Prints the token's length and a sha256 prefix —
+      # enough to tell WHICH value the runner received (compare against the hash
+      # of the intended token) without revealing it — plus Cloudflare's actual
+      # error body, which the -f flag in the publish step hides.
+      - name: Preflight the update-endpoint token
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: "535cbeaa83ca309dd532ff386358e08f"
+          CF_KV_NAMESPACE: "47e2996d1a5c4a738f4322af7e080304"
+        run: |
+          if [ -z "$CF_API_TOKEN" ]; then
+            echo "CF_API_TOKEN not set — the publish step will be skipped."
+            exit 0
+          fi
+          echo "Token length: ${#CF_API_TOKEN}"
+          echo "Token sha256 prefix: $(printf %s "$CF_API_TOKEN" | sha256sum | cut -c1-12)"
+          echo "Verify endpoint says:"
+          curl -sS "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+            -H "Authorization: Bearer $CF_API_TOKEN"; echo
+          BASE="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/storage/kv/namespaces/$CF_KV_NAMESPACE/values"
+          BODY=$(curl -sS -X PUT "$BASE/ci-preflight" \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: text/plain" --data-raw "ok")
+          echo "KV probe write says: $BODY"
+          if ! echo "$BODY" | grep -q '"success": *true'; then
+            echo "::error::CF_API_TOKEN cannot write the update KV namespace — failing before the build. See the probe output above for Cloudflare's reason."
+            exit 1
+          fi
+          curl -sS -X DELETE "$BASE/ci-preflight" \
+            -H "Authorization: Bearer $CF_API_TOKEN" >/dev/null || true
+          echo "Preflight OK — token can write the update namespace."
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
