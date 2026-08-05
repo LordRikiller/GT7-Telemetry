@@ -9,6 +9,75 @@ protocol instead of Forza's.
 console for the stream and decrypts it itself. No PC bridge, no Python, no
 exe. Enter the PS5's IP and drive.
 
+## Install
+
+1. Download `gt7-telemetry-<version>.apk` from the
+   [latest release](https://github.com/LordRikiller/GT7-Telemetry/releases/latest)
+   on the phone (Android 8.0+).
+2. Open the downloaded file. The first time, Android asks you to allow
+   **installs from unknown apps** for your browser or file manager — allow
+   it, then confirm the install.
+3. That's the only manual install you'll ever do: from then on the app
+   offers new versions itself (Settings → **App updates**, plus a prompt on
+   launch when one is waiting).
+
+## Set up — takes a minute
+
+1. On the PS5: **Settings → Network → Connection Status** — note the
+   console's IPv4 address.
+2. Launch the app and type that address into the setup card (or later via
+   Settings → **PlayStation**).
+3. Phone and console must be on the **same Wi-Fi network**. Start GT7 and
+   drive — there is nothing to enable in-game; the console streams to
+   whoever asks. The setup card disappears the moment the first packet
+   arrives.
+
+## Using the app
+
+Once packets flow, the dashboard is the whole app — mount the phone and
+drive. Both landscape and portrait have full layouts.
+
+**What the instrument shows**
+
+- Big **speed** (km/h or mph) and **gear**, with GT7's **suggested gear**
+  when the game offers one.
+- **RPM band scaled to the car's real rev-limiter** (GT7 broadcasts it),
+  with shift lights as you approach the cut.
+- **Lap timing** — live estimated lap, last/best and delta, plus **fuel per
+  lap and laps of fuel remaining** once the app has seen a full lap.
+- **Tyre-temperature pods** for all four corners, **water/oil temperature**,
+  fuel level and boost.
+- Status flags when the game reports them: **TCS active, handbrake,
+  rev limiter**.
+
+**Clusters.** The instrument is drawn from 20 marque-styled layouts across
+9 gauge families. In **Auto** (the default) the app recognises the car
+you're driving from its self-refreshing catalog and picks a matching
+cluster — jump from a GT-R into a Porsche and the dash follows. **Manual**
+keeps whichever layout you choose.
+
+**The ⚙ button** (top of the dash) opens Settings:
+
+| Section | What it does |
+|---|---|
+| PlayStation | The console's LAN IP the app asks for telemetry |
+| Dashboard | Auto (match the car) / Manual, and the layout list |
+| Units | km/h ↔ mph, °C ↔ °F |
+| App updates | Current version, check / download / install |
+
+The screen stays awake while the dashboard is up, and a foreground service
+keeps reading telemetry even if the screen turns off, so a mounted phone
+picks up mid-race without missing a beat.
+
+**If the setup card won't go away**
+
+- Phone and console must be on the same network — guest Wi-Fi or an access
+  point with *client/AP isolation* blocks the UDP stream.
+- Double-check the IP against the console (it can change after a router
+  reboot; a DHCP reservation for the PS5 helps).
+- GT7 streams while you're driving — on some menu/replay screens the
+  stream goes quiet; get on track.
+
 ## How it works
 
 - A foreground service (`TelemetryService`) binds **UDP 33740**, sends a
@@ -27,16 +96,6 @@ exe. Enter the PS5's IP and drive.
   last/best/delta, tyre-temperature pods, fuel/oil/boost, shift lights.
   Auto-selects a per-marque cluster (Ferrari, Porsche, GT-R, …) from the
   car you're driving, or pick one manually — same 20 layouts as the FH6 app.
-
-## Setup
-
-1. On the PS5: **Settings → Network → Connection Status** — note the
-   console's IPv4 address.
-2. Launch the app and type that address into the setup card (or Settings →
-   PlayStation).
-3. Phone and console must be on the **same Wi-Fi**. Start GT7 and drive —
-   there is nothing to enable in-game; the console streams to whoever asks.
-   The setup card disappears the moment the first packet arrives.
 
 ## Project layout
 
@@ -75,15 +134,18 @@ Run on a device. The Gradle wrapper is committed, so from the command line
 ## Releases & in-app updates
 
 Pushing a semver tag (`git tag v0.1.0 && git push origin v0.1.0`) triggers
-`.github/workflows/release.yml`, which builds the signed APK, attaches it to
-a GitHub Release, deploys the update worker and publishes the APK + manifest
-to its KV — the same pipeline as FH6 Telemetry.
+`.github/workflows/release.yml` — or run it from the Actions tab with a
+version number. It builds the APK, verifies the signature against the
+release keystore, attaches it to a GitHub Release and publishes the APK +
+manifest to the update endpoint's KV — the same pipeline as FH6 Telemetry.
+The workflow preflights the `CF_API_TOKEN` secret against the endpoint
+before building, so a bad token fails in seconds, not after the build.
 
 The app updates itself: on launch it checks
 `https://gt7-updates.fh6rik.workers.dev/latest.json` and, if a newer
 `versionCode` is offered, downloads the APK and hands it to the system
-installer via a `FileProvider`. The endpoint goes live on the first release
-after the `CF_API_TOKEN` repo secret is set (see `infra/update-worker/`).
+installer via a `FileProvider`. The Cloudflare Worker behind the endpoint
+lives in `infra/update-worker/` and is deployed once, outside CI.
 
 ## Scope — this is v1 (live dashboard)
 
