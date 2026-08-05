@@ -52,11 +52,11 @@ fun DashboardScreen(viewModel: DashboardViewModel, onOpenSettings: () -> Unit) {
     val manualLayout by viewModel.manualLayout.collectAsStateWithLifecycle()
     val useMph by viewModel.useMph.collectAsStateWithLifecycle()
     val useFahrenheit by viewModel.useFahrenheit.collectAsStateWithLifecycle()
-    val catalogReady by viewModel.catalogReady.collectAsStateWithLifecycle()
+    val catalogRevision by viewModel.catalogRevision.collectAsStateWithLifecycle()
     val ps5Ip by viewModel.ps5Ip.collectAsStateWithLifecycle()
 
     val ordinal = frame?.carOrdinal
-    val carInfo = if (catalogReady) CarCatalog.lookup(ordinal) else null
+    val carInfo = if (catalogRevision > 0) CarCatalog.lookup(ordinal) else null
     val carName = carInfo?.name ?: ordinal?.takeIf { it != 0 }?.let { "Car #$it" }
 
     val autoLayout = DashLayout.forManufacturer(carInfo?.manufacturer) ?: DashLayout.DEFAULT

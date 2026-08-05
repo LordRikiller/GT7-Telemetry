@@ -3,6 +3,7 @@ package com.gt7telemetry.dash
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,13 +25,20 @@ import androidx.compose.ui.unit.sp
 import com.gt7telemetry.Frame
 import kotlin.math.ceil
 
-/** Resolves a [DashLayout] to its themed instrument body. */
+/**
+ * Resolves a [DashLayout] to its themed instrument body. The landscape
+ * families are wide, side-by-side arrangements; in portrait every family
+ * swaps to a stacked variant that keeps the marque's theme and hero
+ * instrument (dial, ring or big numerals) but flows vertically.
+ */
 @Composable
 fun ClusterHost(frame: Frame, layout: DashLayout, useMph: Boolean, useFahrenheit: Boolean, modifier: Modifier = Modifier) {
     val theme = layout.theme
     val data = clusterData(frame, useMph, useFahrenheit)
-    Box(modifier.fillMaxSize()) {
-        when (layout.family) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        if (maxHeight > maxWidth) {
+            PortraitCluster(data, theme, layout)
+        } else when (layout.family) {
             LayoutFamily.DEFAULT -> DefaultCluster(data, theme)
             LayoutFamily.CENTRAL -> CentralCluster(data, theme, layout)
             LayoutFamily.TWIN -> TwinCluster(data, theme, layout)
@@ -41,6 +49,63 @@ fun ClusterHost(frame: Frame, layout: DashLayout, useMph: Boolean, useFahrenheit
             LayoutFamily.DIGITAL_RING -> DigitalRingCluster(data, theme)
             LayoutFamily.OFFSET -> OffsetCluster(data, theme, layout)
         }
+    }
+}
+
+// --- PORTRAIT (all families) ------------------------------------------------
+@Composable
+private fun PortraitCluster(data: ClusterData, theme: ClusterTheme, layout: DashLayout) {
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Hero instrument, themed per family.
+        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            when (layout.family) {
+                LayoutFamily.DIGITAL_RING -> Dial(
+                    Modifier.fillMaxSize(),
+                    gauge = { SegmentedRing(data.rpm / 1000f, tachMax(data), theme, Modifier.fillMaxSize(), segments = 36) },
+                    center = {
+                        Num(data.gear, theme, 56, color = theme.accent, weight = FontWeight.Black)
+                        GearHint(data, theme)
+                        Num("${data.speed}", theme, 22)
+                        Lab("${data.speedUnit} · ${data.rpm} RPM", theme)
+                    })
+                LayoutFamily.DEFAULT, LayoutFamily.BAR, LayoutFamily.MINIMAL -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+                ) {
+                    Num("${data.speed}", theme, 96, color = theme.accent, weight = FontWeight.Black)
+                    Lab(data.speedUnit, theme)
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Lab("Gear ", theme)
+                        Num(data.gear, theme, 40, weight = FontWeight.Black)
+                        Spacer(Modifier.width(8.dp))
+                        GearHint(data, theme)
+                    }
+                    Lab("${data.rpm} / ${data.rpmMax} RPM", theme)
+                }
+                else -> Dial(
+                    Modifier.fillMaxSize(),
+                    gauge = { RadialGauge(data.rpm / 1000f, tachMax(data), theme, Modifier.fillMaxSize(), redline = tachRedline(data), bezel = true) },
+                    center = {
+                        Num(data.gear, theme, 52, color = theme.dialGear, weight = FontWeight.Black)
+                        GearHint(data, theme)
+                        Num("${data.speed}", theme, 22, color = theme.dialText)
+                        Lab(data.speedUnit, theme)
+                    })
+            }
+        }
+        ShiftLights(data.rpmFrac, theme, Modifier.fillMaxWidth())
+        RevBar(data, theme, Modifier.fillMaxWidth())
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TimingBlock(data, theme, Modifier.weight(1f))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Tile(theme, Modifier.fillMaxWidth()) {
+                    Column { Lab("Tyres ${data.tempUnit}", theme); Spacer(Modifier.height(6.dp)); TyrePods(data, theme) }
+                }
+            }
+        }
+        RaceStrip(data, theme, Modifier.fillMaxWidth())
+        VitalsStrip(data, theme, Modifier.fillMaxWidth())
+        IndicatorRow(data, theme, Modifier.fillMaxWidth())
     }
 }
 
@@ -77,7 +142,7 @@ private fun DefaultCluster(data: ClusterData, theme: ClusterTheme) {
             TimingBlock(data, theme, Modifier.weight(1f))
             Tile(theme, Modifier.weight(1f)) { Column { Lab("Tyres ${data.tempUnit}", theme); Spacer(Modifier.height(6.dp)); TyrePods(data, theme) } }
         }
-        PowerStrip(data, theme, Modifier.fillMaxWidth())
+        VitalsStrip(data, theme, Modifier.fillMaxWidth())
     }
 }
 
@@ -97,6 +162,7 @@ private fun CentralCluster(data: ClusterData, theme: ClusterTheme, layout: DashL
             },
             center = {
                 Num(data.gear, theme, 52, color = theme.dialGear, weight = FontWeight.Black)
+                GearHint(data, theme)
                 Num(if (layout.heroSpeed) "${data.rpm}" else "${data.speed}", theme, 15, color = theme.dialText)
                 Lab(if (layout.heroSpeed) "rpm" else data.speedUnit, theme)
             },
@@ -143,7 +209,7 @@ private fun FiveDialCluster(data: ClusterData, theme: ClusterTheme) {
             center = { Num("${data.speed}", theme, 15); Lab(data.speedUnit, theme) })
         Dial(Modifier.weight(1.25f).fillMaxSize(),
             gauge = { RadialGauge(data.rpm / 1000f, tachMax(data), theme, Modifier.fillMaxSize(), redline = tachRedline(data)) },
-            center = { Num(data.gear, theme, 40, color = theme.dialGear, weight = FontWeight.Black); Lab("${data.rpm} rpm", theme) })
+            center = { Num(data.gear, theme, 40, color = theme.dialGear, weight = FontWeight.Black); GearHint(data, theme); Lab("${data.rpm} rpm", theme) })
         Dial(Modifier.weight(0.85f).fillMaxSize(),
             gauge = { RadialGauge(data.boostVal.toFloat().coerceIn(0f, 20f), 20f, theme, Modifier.fillMaxSize(), majorStep = 5f) },
             center = { Num(data.boost, theme, 15); Lab("boost", theme) })
@@ -203,7 +269,7 @@ private fun TilesCluster(data: ClusterData, theme: ClusterTheme) {
     Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Dial(Modifier.weight(0.9f).fillMaxSize(),
             gauge = { RadialGauge(data.rpm / 1000f, tachMax(data), theme, Modifier.fillMaxSize(), redline = tachRedline(data)) },
-            center = { Num(data.gear, theme, 36, color = theme.dialGear, weight = FontWeight.Black); Lab("${data.rpm}", theme) })
+            center = { Num(data.gear, theme, 36, color = theme.dialGear, weight = FontWeight.Black); GearHint(data, theme); Lab("${data.rpm}", theme) })
         Column(Modifier.weight(1.15f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             val cells = listOf(
                 "Speed" to "${data.speed}", "Boost" to data.boost, "Fuel" to "${data.fuel}%",
@@ -230,6 +296,7 @@ private fun DigitalRingCluster(data: ClusterData, theme: ClusterTheme) {
             gauge = { SegmentedRing(data.rpm / 1000f, tachMax(data), theme, Modifier.fillMaxSize(), segments = 36) },
             center = {
                 Num(data.gear, theme, 50, color = theme.accent, weight = FontWeight.Black)
+                GearHint(data, theme)
                 Num("${data.speed}", theme, 18)
                 Lab("${data.rpm} / ${data.rpmMax}", theme)
             })
@@ -246,7 +313,7 @@ private fun OffsetCluster(data: ClusterData, theme: ClusterTheme, layout: DashLa
     Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Dial(Modifier.weight(1.25f).fillMaxSize(),
             gauge = { RadialGauge(data.rpm / 1000f, tachMax(data), theme, Modifier.fillMaxSize(), redline = tachRedline(data), bezel = true) },
-            center = { Num(data.gear, theme, 44, color = theme.dialGear, weight = FontWeight.Black); Lab("${data.rpm} rpm", theme) })
+            center = { Num(data.gear, theme, 44, color = theme.dialGear, weight = FontWeight.Black); GearHint(data, theme); Lab("${data.rpm} rpm", theme) })
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Column { Num("${data.speed}", theme, 54, weight = FontWeight.Black); Lab(data.speedUnit, theme) }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {

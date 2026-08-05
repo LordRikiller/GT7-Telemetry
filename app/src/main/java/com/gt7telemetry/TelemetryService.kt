@@ -111,7 +111,10 @@ class TelemetryService : Service() {
                         windowCount++
                         sinceHeartbeat++
                         lastPacketAt = System.currentTimeMillis()
-                        TelemetryRepository.publish(frame.copy(curLap = lapTimer.update(frame)))
+                        TelemetryRepository.publish(frame.copy(
+                            curLap = lapTimer.update(frame),
+                            fuelPerLapPct = fuelTracker.update(frame),
+                        ))
                     }
 
                     val now = System.currentTimeMillis()
@@ -131,6 +134,7 @@ class TelemetryService : Service() {
     }
 
     private val lapTimer = LapTimer()
+    private val fuelTracker = FuelTracker()
 
     /** Send the 'A' heartbeat to the PS5. False when no valid IP is set yet. */
     private fun sendHeartbeat(s: DatagramSocket): Boolean {

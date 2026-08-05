@@ -36,6 +36,7 @@ object Packet {
     private const val FLAG_HAS_TURBO = 1 shl 4
     private const val FLAG_REV_LIMITER = 1 shl 5
     private const val FLAG_HANDBRAKE = 1 shl 6
+    private const val FLAG_ASM = 1 shl 10
     private const val FLAG_TCS = 1 shl 11
 
     private const val BAR_TO_PSI = 14.503773773
@@ -131,6 +132,7 @@ object Packet {
             brakePct = brake / 255.0 * 100.0,
             handbrake = flags and FLAG_HANDBRAKE != 0,
             tcsActive = flags and FLAG_TCS != 0,
+            asmActive = flags and FLAG_ASM != 0,
             fuelPct = if (fuelCapacity > 0) (fuelLevel / fuelCapacity * 100.0).coerceIn(0.0, 100.0) else 0.0,
             fuelLiters = fuelLevel,
             oilTempC = oilTemp,
@@ -177,6 +179,7 @@ data class Frame(
     val brakePct: Double,
     val handbrake: Boolean,
     val tcsActive: Boolean,
+    val asmActive: Boolean,
     val fuelPct: Double,
     val fuelLiters: Double,
     val oilTempC: Double,
@@ -186,6 +189,8 @@ data class Frame(
     val tyreTempC: DoubleArray,
     val slipRatio: DoubleArray,
     val curLap: Double,
+    /** Fuel % consumed per lap, measured over the last completed lap (0 = unknown). */
+    val fuelPerLapPct: Double = 0.0,
     val lastLap: Double,
     val bestLap: Double,
     val lapNumber: Int,
@@ -229,5 +234,38 @@ class LapTimer {
             pausedAt = 0L
         }
         return (nowMs - startedAt) / 1000.0
+    }
+}
+
+/**
+ * Measures fuel consumption per lap by sampling the fuel gauge at each lap
+ * boundary. The estimate is the last completed lap's burn; a lap that
+ * doesn't follow the previous one (restart, teleport to pits) resets it.
+ * Feeds the "laps of fuel left" readout.
+ */
+class FuelTracker {
+    private var lapCount = Int.MIN_VALUE
+    private var fuelAtLapStart = 0.0
+    private var perLapPct = 0.0
+
+    /** Returns fuel % used per lap (0 = not yet known), updating state. */
+    fun update(frame: Frame): Double {
+        if (!frame.onTrack || frame.lapNumber <= 0) {
+            lapCount = Int.MIN_VALUE
+            perLapPct = 0.0
+            return 0.0
+        }
+        if (frame.lapNumber != lapCount) {
+            if (frame.lapNumber == lapCount + 1) {
+                val used = fuelAtLapStart - frame.fuelPct
+                // Ignore laps with refuelling (negative) or EV/no-fuel cars (~0).
+                if (used > 0.05) perLapPct = used
+            } else {
+                perLapPct = 0.0
+            }
+            lapCount = frame.lapNumber
+            fuelAtLapStart = frame.fuelPct
+        }
+        return perLapPct
     }
 }

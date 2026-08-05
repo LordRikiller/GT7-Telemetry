@@ -134,4 +134,21 @@ class PacketTest {
         val offTrack = f.copy(onTrack = false, lapNumber = 0)
         assertEquals(0.0, timer.update(offTrack, 12_000L), 1e-6)
     }
+
+    @Test
+    fun `fuel tracker measures per-lap burn over consecutive laps only`() {
+        val base = frame() // lap 3, fuelPct 50
+        val tracker = FuelTracker()
+        assertEquals(0.0, tracker.update(base.copy(lapNumber = 1, fuelPct = 60.0)), 1e-6)
+        // Lap 1 -> 2 burned 5%.
+        assertEquals(5.0, tracker.update(base.copy(lapNumber = 2, fuelPct = 55.0)), 1e-6)
+        // Mid-lap frames keep reporting the last measured burn.
+        assertEquals(5.0, tracker.update(base.copy(lapNumber = 2, fuelPct = 53.0)), 1e-6)
+        // Lap 2 -> 3 burned 6%.
+        assertEquals(6.0, tracker.update(base.copy(lapNumber = 3, fuelPct = 49.0)), 1e-6)
+        // Restart (lap jumps back to 1): estimate resets.
+        assertEquals(0.0, tracker.update(base.copy(lapNumber = 1, fuelPct = 100.0)), 1e-6)
+        // Refuelled/EV lap (no burn) leaves the estimate unknown.
+        assertEquals(0.0, tracker.update(base.copy(lapNumber = 2, fuelPct = 100.0)), 1e-6)
+    }
 }

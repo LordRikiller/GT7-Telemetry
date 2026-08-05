@@ -40,18 +40,22 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val useFahrenheit: StateFlow<Boolean> =
         settings.useFahrenheit.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _catalogReady = MutableStateFlow(false)
-    val catalogReady: StateFlow<Boolean> = _catalogReady.asStateFlow()
+    /** Bumped whenever the car catalog gains data (bundled load, live refresh). */
+    private val _catalogRevision = MutableStateFlow(0)
+    val catalogRevision: StateFlow<Int> = _catalogRevision.asStateFlow()
 
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
     init {
-        // Load the ~575-car catalog off the main thread; flip a flag so the UI
-        // recomposes the car name once it's ready.
+        // Load the bundled ~575-car catalog off the main thread, then refresh
+        // it from the live community DB so cars added in a game patch resolve
+        // (and the auto dashboard picker works for them) without an app update.
         viewModelScope.launch {
             withContext(Dispatchers.IO) { CarCatalog.load(getApplication()) }
-            _catalogReady.value = true
+            _catalogRevision.value = CarCatalog.revision
+            withContext(Dispatchers.IO) { CarCatalog.refresh(getApplication()) }
+            _catalogRevision.value = CarCatalog.revision
         }
         // Silently check for an app update on launch (if an endpoint is set).
         if (UpdateChecker.isConfigured) checkForUpdates()

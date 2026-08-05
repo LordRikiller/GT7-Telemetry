@@ -60,10 +60,21 @@ data class ClusterData(
     val tempUnit: String,
     val fuel: Int,
     val oilTemp: Int,
+    val water: Int,
     val boost: String,
     val throttle: Int,
     val brake: Int,
     val boostVal: Double,
+    /** Laps still to run (incl. the current one); null when not a lapped race. */
+    val lapsLeft: Int?,
+    /** Estimated laps of fuel remaining; null until one clean lap is measured. */
+    val fuelLaps: Double?,
+    /** Suggested gear when the game recommends one different from current. */
+    val suggested: String?,
+    val tcs: Boolean,
+    val asm: Boolean,
+    val handbrake: Boolean,
+    val limiter: Boolean,
 )
 
 fun clusterData(f: Frame, useMph: Boolean, useFahrenheit: Boolean): ClusterData {
@@ -97,10 +108,19 @@ fun clusterData(f: Frame, useMph: Boolean, useFahrenheit: Boolean): ClusterData 
         tempUnit = if (useFahrenheit) "°F" else "°C",
         fuel = f.fuelPct.roundToInt(),
         oilTemp = temp(f.oilTempC).roundToInt(),
+        water = temp(f.waterTempC).roundToInt(),
         boost = Fmt.n1(f.boostPsi),
         throttle = f.throttlePct.roundToInt(),
         brake = f.brakePct.roundToInt(),
         boostVal = f.boostPsi,
+        lapsLeft = if (f.totalLaps > 0 && f.lapNumber in 1..f.totalLaps)
+            f.totalLaps - f.lapNumber + 1 else null,
+        fuelLaps = if (f.fuelPerLapPct > 0.05) f.fuelPct / f.fuelPerLapPct else null,
+        suggested = f.suggestedGear?.takeIf { it != f.gear }?.toString(),
+        tcs = f.tcsActive,
+        asm = f.asmActive,
+        handbrake = f.handbrake,
+        limiter = f.revLimiterActive,
     )
 }
 
@@ -303,13 +323,59 @@ fun TimingBlock(data: ClusterData, theme: ClusterTheme, modifier: Modifier = Mod
     }
 }
 
+/** Fuel / water / oil / boost — everything GT7 reports about the drivetrain. */
 @Composable
-fun PowerStrip(data: ClusterData, theme: ClusterTheme, modifier: Modifier = Modifier) {
+fun VitalsStrip(data: ClusterData, theme: ClusterTheme, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
         Stat("Fuel", "${data.fuel}", "%", theme, Modifier.weight(1f))
+        Stat("Water", "${data.water}", data.tempUnit, theme, Modifier.weight(1f))
         Stat("Oil", "${data.oilTemp}", data.tempUnit, theme, Modifier.weight(1f))
         Stat("Boost", data.boost, "psi", theme, Modifier.weight(1f))
     }
+}
+
+/** Race-management chips: laps remaining and estimated laps of fuel. */
+@Composable
+fun RaceStrip(data: ClusterData, theme: ClusterTheme, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Stat("Laps left", data.lapsLeft?.toString() ?: "–", "", theme, Modifier.weight(1f))
+        Stat("Fuel range", data.fuelLaps?.let { "%.1f".format(it) } ?: "–", "laps", theme, Modifier.weight(1f))
+    }
+}
+
+/** TCS / ASM / handbrake / rev-limiter status lamps. */
+@Composable
+fun IndicatorRow(data: ClusterData, theme: ClusterTheme, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Indicator("TCS", data.tcs, theme.accent, theme, Modifier.weight(1f))
+        Indicator("ASM", data.asm, theme.accent, theme, Modifier.weight(1f))
+        Indicator("HANDBRAKE", data.handbrake, theme.warn, theme, Modifier.weight(1f))
+        Indicator("LIMITER", data.limiter, theme.redline, theme, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun Indicator(label: String, on: Boolean, onColor: Color, theme: ClusterTheme, modifier: Modifier = Modifier) {
+    val col = if (on) onColor else theme.mute
+    Box(
+        modifier.clip(RoundedCornerShape(6.dp))
+            .background(if (on) onColor.copy(alpha = 0.16f) else theme.panel)
+            .border(1.dp, if (on) onColor else theme.line, RoundedCornerShape(6.dp))
+            .padding(vertical = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = col, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+    }
+}
+
+/** "▲ 4" hint under the gear when the game suggests a different one. */
+@Composable
+fun GearHint(data: ClusterData, theme: ClusterTheme, modifier: Modifier = Modifier) {
+    val s = data.suggested ?: return
+    Text(
+        "▲ $s", modifier = modifier, color = theme.accent, fontSize = 13.sp,
+        fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
+    )
 }
 
 @Composable
