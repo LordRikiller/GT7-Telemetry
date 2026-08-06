@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -74,6 +75,7 @@ fun DashboardScreen(
             theme = theme,
             status = status,
             raceOn = frame?.raceOn == true,
+            inMenus = frame?.onTrack == false,
             pkt = status.packetsPerSec,
             carName = carName,
             layoutLabel = if (dashMode == DashMode.AUTO) "${layout.label} · auto" else layout.label,
@@ -89,8 +91,41 @@ fun DashboardScreen(
         Spacer(Modifier.height(10.dp))
         Box(Modifier.weight(1f)) {
             val f = frame
-            if (!status.everReceived || f == null) SetupCard(ps5Ip, theme, onSaveIp = viewModel::setPs5Ip)
-            else ClusterHost(f, layout, useMph, useFahrenheit)
+            if (!status.everReceived || f == null) {
+                SetupCard(ps5Ip, theme, onSaveIp = viewModel::setPs5Ip)
+            } else {
+                // In menus/replays GT7 keeps streaming the LAST on-track
+                // values — without this the dash impersonates a live
+                // instrument frozen mid-corner. Dim it and say why.
+                val idle = status.live && !f.raceOn
+                Box(Modifier.fillMaxSize().alpha(if (idle) 0.25f else 1f)) {
+                    ClusterHost(f, layout, useMph, useFahrenheit)
+                }
+                if (idle) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                                .background(theme.panel.copy(alpha = 0.92f))
+                                .padding(horizontal = 22.dp, vertical = 14.dp),
+                        ) {
+                            val title = when {
+                                f.paused && f.onTrack -> "PAUSED"
+                                !f.onTrack -> "IN MENUS"
+                                else -> "LOADING…"
+                            }
+                            Text(title, color = theme.accent, fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                if (!f.onTrack) "Last session's data shown dimmed — the dash goes live when you're on track"
+                                else "The dash resumes when the game does",
+                                color = theme.ink2, fontSize = 12.sp,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -116,6 +151,7 @@ private fun TopBar(
     theme: ClusterTheme,
     status: com.gt7telemetry.Status,
     raceOn: Boolean,
+    inMenus: Boolean,
     pkt: Int,
     carName: String?,
     layoutLabel: String,
@@ -131,6 +167,7 @@ private fun TopBar(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         val (txt, col) = when {
             status.live && raceOn -> "LIVE" to theme.good
+            status.live && inMenus -> "IN MENUS" to theme.mute
             status.live -> "PAUSED" to theme.warn
             status.everReceived -> "NO PACKETS" to theme.redline
             else -> "WAITING…" to theme.mute
