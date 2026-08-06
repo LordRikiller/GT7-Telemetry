@@ -26,7 +26,7 @@ class PacketTest {
      * flags 0x0011 (on-track, turbo) · gear 4 (suggested 5) ·
      * throttle 255 · brake 0 · wheelFL 100 rad/s × r 0.35 m · car 1234.
      */
-    private val packetHex =
+    val packetHex = // shared with LapRecorderTest as a realistic template frame
         "dc26cf81303fa80ed53e4ce328a291ae00d71a47ad5c841cdaa98bb7ce61a02c" +
             "cda0b1ca871ced25d0b9b57faca4203a49f5cbbc284204036de7a63884adfed7" +
             "0df0ad0b3d38aaf83a0ae1d3fe660276ad2c95cb9b61a3a7f234faa25dd28fa3" +
@@ -92,6 +92,89 @@ class PacketTest {
         assertEquals(1234, f.carOrdinal)
         // Wheel FL: |100 rad/s * 0.35 m| / 40 m/s = 0.875 slip ratio.
         assertEquals(0.875, f.slipRatio[0], 1e-3)
+        // A 296-byte packet carries no extended channels.
+        assertNull(f.steeringRad)
+        assertNull(f.sway)
+        assertNull(f.energyRecovery)
+    }
+
+    /**
+     * The '~' heartbeat's 344-byte extended packet: same layout up to 0x128,
+     * then steering / sway / heave / surge / energy-recovery — and a
+     * different seed-XOR constant (0x55FABB4F instead of 0xDEADBEAF). Built
+     * in-test from plaintext and encrypted with the app's own (separately
+     * PyCryptodome-validated) Salsa20, exactly as the console would.
+     */
+    @Test
+    fun `extended tilde packet decodes steering and chassis channels`() {
+        val plain = ByteArray(Packet.SIZE_TILDE)
+        val b = java.nio.ByteBuffer.wrap(plain).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        b.putInt(0x00, Packet.MAGIC)
+        b.putFloat(0x30, 0.25f)      // yaw rate rad/s
+        b.putFloat(0x38, 0.12f)      // body height m
+        b.putFloat(0x3C, 5500f)      // rpm
+        b.putFloat(0x4C, 50f)        // speed m/s
+        b.putShort(0x74, 2)          // lap
+        b.putShort(0x8E, 0x0001)     // flags: on-track
+        b.put(0x90, ((15 shl 4) or 3).toByte()) // gear 3, no suggested gear (15)
+        // Suspension travel FL..RR.
+        floatArrayOf(0.051f, 0.052f, 0.063f, 0.064f).forEachIndexed { i, v -> b.putFloat(0xC4 + i * 4, v) }
+        b.putFloat(0xF4, 0.5f)       // clutch pedal
+        b.putFloat(0xF8, 0.9f)       // clutch engagement
+        floatArrayOf(3.2f, 2.1f, 1.6f, 1.3f, 1.1f, 0.9f, 0f, 0f).forEachIndexed { i, v ->
+            b.putFloat(0x104 + i * 4, v)
+        }
+        b.putInt(0x124, 4321)        // car code
+        b.putFloat(0x128, -0.5f)     // steering wheel angle, rad (left)
+        b.putFloat(0x130, 1.5f)      // sway
+        b.putFloat(0x134, -0.2f)     // heave
+        b.putFloat(0x138, 0.8f)      // surge
+        b.putFloat(0x150, 42f)       // energy recovery
+
+        // Encrypt like the console: Salsa20 over the whole datagram, nonce
+        // from (seed ^ 0x55FABB4F) ‖ seed, seed left readable at 0x40.
+        val key = "Simulator Interface Packet GT7 ver 0.0".toByteArray(Charsets.US_ASCII).copyOf(32)
+        val seed = 0x0BADF00D
+        val nonce = ByteArray(8)
+        java.nio.ByteBuffer.wrap(nonce).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .putInt(seed xor 0x55FABB4F).putInt(seed)
+        val enc = Salsa20.xor(plain, plain.size, key, nonce)
+        java.nio.ByteBuffer.wrap(enc).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(0x40, seed)
+
+        val f = Packet.parse(enc, Packet.SIZE_TILDE)!!
+        assertEquals(5500.0, f.rpm, 1e-3)
+        assertEquals(180.0, f.speedKmh, 1e-3)            // 50 m/s
+        assertEquals(3, f.gear)
+        assertEquals(4321, f.carOrdinal)
+        assertEquals(0.25, f.yawRateRadS, 1e-6)
+        assertEquals(0.12, f.bodyHeightM, 1e-6)
+        assertEquals(0.051, f.suspensionM[0], 1e-6)
+        assertEquals(0.064, f.suspensionM[3], 1e-6)
+        assertEquals(50.0, f.clutchPct, 1e-3)            // 0.5 -> 50 %
+        assertEquals(0.9, f.clutchEngagement, 1e-6)
+        assertEquals(3.2, f.gearRatios[0], 1e-6)
+        assertEquals(0.9, f.gearRatios[5], 1e-6)
+        assertEquals(-0.5, f.steeringRad!!, 1e-6)
+        assertEquals(1.5, f.sway!!, 1e-6)
+        assertEquals(-0.2, f.heave!!, 1e-6)
+        assertEquals(0.8, f.surge!!, 1e-6)
+        assertEquals(42.0, f.energyRecovery!!, 1e-6)
+    }
+
+    @Test
+    fun `tilde packet with the legacy xor constant fails the magic check`() {
+        // Same plaintext but encrypted with packet-A's 0xDEADBEAF constant:
+        // parse() must reject it (it decrypts 344-byte packets with 0x55FABB4F).
+        val plain = ByteArray(Packet.SIZE_TILDE)
+        java.nio.ByteBuffer.wrap(plain).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(0x00, Packet.MAGIC)
+        val key = "Simulator Interface Packet GT7 ver 0.0".toByteArray(Charsets.US_ASCII).copyOf(32)
+        val seed = 0x0BADF00D
+        val nonce = ByteArray(8)
+        java.nio.ByteBuffer.wrap(nonce).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .putInt(seed xor 0xDEADBEAF.toInt()).putInt(seed)
+        val enc = Salsa20.xor(plain, plain.size, key, nonce)
+        java.nio.ByteBuffer.wrap(enc).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(0x40, seed)
+        assertNull(Packet.parse(enc, Packet.SIZE_TILDE))
     }
 
     @Test

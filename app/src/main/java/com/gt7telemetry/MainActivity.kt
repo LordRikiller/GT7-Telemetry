@@ -21,7 +21,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gt7telemetry.ui.DashboardScreen
 import com.gt7telemetry.ui.DashboardViewModel
+import com.gt7telemetry.ui.EngineerScreen
 import com.gt7telemetry.ui.Gt7Theme
+import com.gt7telemetry.ui.LoggerScreen
 import com.gt7telemetry.ui.SettingsScreen
 import com.gt7telemetry.update.UpdateInstaller
 import com.gt7telemetry.update.UpdateState
@@ -59,7 +61,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { DASHBOARD, SETTINGS }
+private enum class Screen { DASHBOARD, SETTINGS, LOGGER, ENGINEER }
 
 @Composable
 private fun AppRoot(viewModel: DashboardViewModel) {
@@ -78,10 +80,22 @@ private fun AppRoot(viewModel: DashboardViewModel) {
         Screen.DASHBOARD -> DashboardScreen(
             viewModel = viewModel,
             onOpenSettings = { screen = Screen.SETTINGS },
+            onOpenLogger = { screen = Screen.LOGGER },
+            onOpenEngineer = { screen = Screen.ENGINEER },
         )
         Screen.SETTINGS -> SettingsScreen(
             viewModel = viewModel,
             onBack = { screen = Screen.DASHBOARD },
+        )
+        Screen.LOGGER -> LoggerScreen(
+            viewModel = viewModel,
+            onBack = { screen = Screen.DASHBOARD },
+            onOpenEngineer = { screen = Screen.ENGINEER },
+        )
+        Screen.ENGINEER -> EngineerScreen(
+            viewModel = viewModel,
+            onBack = { screen = Screen.DASHBOARD },
+            onOpenLogger = { screen = Screen.LOGGER },
         )
     }
 }

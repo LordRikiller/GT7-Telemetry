@@ -34,8 +34,10 @@ exe. Enter the PS5's IP and drive.
 
 ## Using the app
 
-Once packets flow, the dashboard is the whole app — mount the phone and
-drive. Both landscape and portrait have full layouts.
+Once packets flow, mount the phone and drive. Four screens: the
+**dashboard** (the main instrument), the **data logger** (LOG), the **AI
+race engineer** (AI) and **Settings** (⚙). Both landscape and portrait
+have full layouts everywhere.
 
 **What the instrument shows**
 
@@ -66,6 +68,32 @@ layout with the app's exact colours and gauge geometry
 The page is generated — run `python3 tools/gen_showcase.py` after adding a
 layout so it never drifts from the code.
 
+**The LOG button — a proper data logger.** Every full lap is recorded
+automatically at 60 Hz: throttle, brake, steering angle, speed, gear, RPM,
+racing line and lateral/longitudinal G. The screen shows live scrolling
+input traces (throttle green, brake red, steering white — the classic
+logger convention), the session's lap list with per-lap stats (full-throttle
+/ braking / coasting shares, max G, delta to best), and for any lap a track
+map drawn from the car's position — coloured by speed so braking zones pop
+out — above the full lap traces. Steering needs GT7 ≥ 1.42 (the app asks
+the console for the extended telemetry packet and falls back automatically
+on older firmware).
+
+**The AI button — your race engineer.** The app builds a *briefing*: car,
+your setup description, the lap table and a downsampled best-lap trace,
+framed as a request for concrete tuning changes. Two ways to use it, both
+free of surprises:
+
+- **Share it** to any AI app you already pay for (ChatGPT, Claude, Gemini,
+  Copilot…) via the Android share sheet — zero API cost.
+- **Built-in engineer**: paste your own API key (Anthropic, or Google's
+  Gemini free tier) and press Analyse. Exactly one capped request per
+  press — no loop, no background usage, so a full analysis costs a few
+  cents at most. The key never leaves the phone.
+
+GT7's stream doesn't broadcast the tuning sheet itself, so there's a setup
+notes field — describe your tune once and every briefing includes it.
+
 **The ⚙ button** (top of the dash) opens Settings:
 
 | Section | What it does |
@@ -91,14 +119,22 @@ picks up mid-race without missing a beat.
 ## How it works
 
 - A foreground service (`TelemetryService`) binds **UDP 33740**, sends a
-  1-byte `'A'` heartbeat to the console's **port 33739** (on start, every
+  1-byte `'~'` heartbeat to the console's **port 33739** (on start, every
   100 packets and whenever the stream goes quiet), and runs the receive
   loop on its own thread, surviving screen-off so a mounted phone keeps
-  reading. GT7 answers with encrypted telemetry at 60 Hz.
-- `Packet.parse()` decrypts each 296-byte "Simulator Interface" packet
-  (Salsa20, key `"Simulator Interface Packet GT7 ver 0.0"[:32]`, nonce from
-  the plaintext seed at 0x40) and decodes it at the community-documented
-  offsets — proven by unit tests against PyCryptodome-generated ciphertext.
+  reading. GT7 answers with encrypted telemetry at 60 Hz. `'~'` requests
+  the 344-byte extended packet (steering angle, chassis G, suspension
+  travel — GT7 ≥ 1.42); if nothing answers, the service alternates in the
+  legacy `'A'` so old firmware streams the 296-byte packet instead.
+- `Packet.parse()` decrypts each "Simulator Interface" packet (Salsa20,
+  key `"Simulator Interface Packet GT7 ver 0.0"[:32]`, nonce from the
+  plaintext seed at 0x40 — XOR constant per format: 296 B `0xDEADBEAF`,
+  316 B `0xDEADBEEF`, 344 B `0x55FABB4F`) and decodes it at the
+  community-documented offsets — proven by unit tests against
+  PyCryptodome-generated ciphertext.
+- `LapRecorder` samples every frame into per-lap column arrays, splits on
+  GT7's lap counter and stamps each lap with the game's official time; the
+  logger UI and the race-engineer briefing both read from it.
 - `TelemetryRepository` bridges the receiver to the Compose UI via
   `StateFlow`.
 - The dashboard renders the instrument: big speed/gear, RPM band scaled to
@@ -112,15 +148,17 @@ picks up mid-race without missing a beat.
 ```
 app/src/main/java/com/gt7telemetry/
 ├── Salsa20.kt              Dependency-free Salsa20 (validated against PyCryptodome)
-├── TelemetryFrame.kt       Packet.parse() (decrypt + 296-byte decode), Frame, LapTimer
+├── TelemetryFrame.kt       Packet.parse() (decrypt + 296/344-byte decode), Frame, LapTimer
 ├── TelemetryRepository.kt  Singleton bridge: two StateFlows (Frame, Status)
-├── TelemetryService.kt     Foreground service: UDP 33740, heartbeats, receive loop
+├── TelemetryService.kt     Foreground service: UDP 33740, '~' heartbeats, receive loop
 ├── MainActivity.kt         Service start, keep-screen-on, notif permission, Compose host
 ├── car/CarCatalog.kt       CarCode -> name/manufacturer (assets/gt7_car_catalog.json)
 ├── dash/                   The cluster engine (9 families × 52 marque themes)
-├── settings/               DataStore prefs: PS5 IP, dash mode/layout, units
+├── logger/LapRecorder.kt   60 Hz per-lap trace store + lap summaries
+├── engineer/               Race-engineer briefing builder + one-shot API client
+├── settings/               DataStore prefs: PS5 IP, dash, units, engineer key
 ├── update/                 In-app updater (manifest check → download → install)
-└── ui/                     Compose dashboard, settings screen, theme, formatting
+└── ui/                     Compose dashboard, data logger, engineer, settings
 
 app/src/test/java/com/gt7telemetry/   Salsa20 + packet-offset tests (JVM, no device)
 docs/clusters.html                    Generated showcase of every cluster layout
@@ -159,13 +197,16 @@ The app updates itself: on launch it checks
 installer via a `FileProvider`. The Cloudflare Worker behind the endpoint
 lives in `infra/update-worker/` and is deployed once, outside CI.
 
-## Scope — this is v1 (live dashboard)
+## Scope
 
-**In:** standalone heartbeat + decrypt + parse, full live instrument,
-km/h·mph and °C·°F toggles, screen-wake, per-car auto clusters, in-app
-updater.
+**In:** standalone heartbeat + decrypt + parse (296 & 344-byte extended
+packets), full live instrument, per-car auto clusters, km/h·mph and °C·°F
+toggles, screen-wake, in-app updater, 60 Hz per-lap data logger (inputs,
+line, G), track map, AI race-engineer briefing (share sheet or your own
+Anthropic/Gemini key — one capped request per analysis).
 
-**Not yet (phase 2):** session recording, lap breakdown, route trace,
-two-session compare, tuning-report export — same roadmap as the FH6 app.
+**Not yet:** two-session compare, persistent lap storage across app
+restarts, a read-back tuning sheet (GT7 doesn't broadcast setup values —
+the briefing carries your own setup description instead).
 
 MIT. Not affiliated with Sony Interactive Entertainment / Polyphony Digital.

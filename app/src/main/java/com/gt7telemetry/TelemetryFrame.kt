@@ -6,24 +6,35 @@ import java.nio.ByteOrder
 /**
  * Gran Turismo 7 "Simulator Interface" packet decoder.
  *
- * GT7 streams packet A: exactly 296 bytes, little-endian, encrypted with
- * Salsa20. The key is the first 32 bytes of "Simulator Interface Packet GT7
- * ver 0.0"; the 8-byte nonce is derived from the seed the console writes in
- * plaintext at offset 0x40 of every datagram (iv2 = seed ^ 0xDEADBEAF, nonce
- * = LE(iv2) ‖ LE(seed)). A successful decrypt is proven by the "G7S0" magic
- * (0x47375330) at offset 0.
+ * GT7 streams one of three packet formats depending on the heartbeat byte
+ * the client sends — all little-endian, all Salsa20-encrypted with the key
+ * being the first 32 bytes of "Simulator Interface Packet GT7 ver 0.0":
+ *
+ *   'A' → 296 bytes (0x128) · nonce seed XOR 0xDEADBEAF
+ *   'B' → 316 bytes (0x13C) · XOR 0xDEADBEEF · adds steering + sway/heave/surge
+ *   '~' → 344 bytes (0x158) · XOR 0x55FABB4F · adds filtered pedals + energy recovery
+ *
+ * The 8-byte nonce is derived from the seed the console writes in plaintext
+ * at offset 0x40 of every datagram (iv2 = seed ^ XOR-constant, nonce =
+ * LE(iv2) ‖ LE(seed)). A successful decrypt is proven by the "G7S0" magic
+ * (0x47375330) at offset 0. The per-format constants match Nenkai's PDTools
+ * reference implementation; the extended formats need GT7 ≥ 1.42.
  *
  * Fields are read at their documented offsets (RPM @0x3C, speed m/s @0x4C,
- * tyre temps @0x60..0x6C, gears @0x90, car code @0x124, …) as mapped by the
- * GT7 community (Nenkai's SimulatorInterface docs / gt7dashboard).
+ * tyre temps @0x60..0x6C, gears @0x90, car code @0x124, steering @0x128, …)
+ * as mapped by the GT7 community (Nenkai's SimulatorInterface docs /
+ * gt7dashboard).
  *
  * Wire units: speed m/s · tyre temps °C · lap times ms (−1 = no time) ·
- * turbo boost as (x−1) bar · oil pressure bar. Conversions to display units
- * live in [Frame] so they exist in exactly one place.
+ * turbo boost as (x−1) bar · oil pressure bar · steering radians.
+ * Conversions to display units live in [Frame] so they exist in exactly one
+ * place.
  */
 object Packet {
 
-    const val SIZE = 296
+    const val SIZE = 296        // packet 'A' (0x128)
+    const val SIZE_B = 316      // packet 'B' (0x13C)
+    const val SIZE_TILDE = 344  // packet '~' (0x158)
     const val MAGIC = 0x47375330 // "G7S0" little-endian
 
     private val KEY: ByteArray =
@@ -42,18 +53,24 @@ object Packet {
     private const val BAR_TO_PSI = 14.503773773
 
     /**
-     * Decrypt + parse a raw datagram. Returns null if the length is not
-     * exactly 296 bytes or the decrypted magic doesn't check out (stray
-     * packets on the port are simply ignored rather than crashing the
-     * receiver).
+     * Decrypt + parse a raw datagram. Returns null if the length isn't one
+     * of the three known formats or the decrypted magic doesn't check out
+     * (stray packets on the port are simply ignored rather than crashing
+     * the receiver).
      */
     fun parse(data: ByteArray, length: Int): Frame? {
-        if (length != SIZE) return null
+        // Each packet format encrypts with a different seed-XOR constant.
+        val xorConst = when (length) {
+            SIZE -> 0xDEADBEAF.toInt()
+            SIZE_B -> 0xDEADBEEF.toInt()
+            SIZE_TILDE -> 0x55FABB4F
+            else -> return null
+        }
 
         // The IV seed is readable pre-decryption at 0x40.
         val seedBuf = ByteBuffer.wrap(data, 0x40, 4).order(ByteOrder.LITTLE_ENDIAN)
         val iv1 = seedBuf.int
-        val iv2 = iv1 xor 0xDEADBEAF.toInt()
+        val iv2 = iv1 xor xorConst
         val nonce = ByteArray(8)
         ByteBuffer.wrap(nonce).order(ByteOrder.LITTLE_ENDIAN).putInt(iv2).putInt(iv1)
 
@@ -88,6 +105,22 @@ object Packet {
         val throttle = b.get(0x91).toInt() and 0xFF
         val brake = b.get(0x92).toInt() and 0xFF
         val carCode = b.getInt(0x124)
+
+        // Chassis motion (standard packet, decoded since v0.5 for the logger).
+        val yawRate = b.getFloat(0x30).toDouble()       // angular velocity Y, rad/s
+        val bodyHeight = b.getFloat(0x38).toDouble()    // metres
+        val suspension = DoubleArray(4) { b.getFloat(0xC4 + it * 4).toDouble() }
+        val clutchPedal = b.getFloat(0xF4).toDouble()   // 0..1
+        val clutchEngagement = b.getFloat(0xF8).toDouble()
+        val gearRatios = DoubleArray(8) { b.getFloat(0x104 + it * 4).toDouble() }
+
+        // Extended fields — only present in the 'B'/'~' formats (GT7 ≥ 1.42).
+        val extended = length >= SIZE_B
+        val steering = if (extended) b.getFloat(0x128).toDouble() else null
+        val sway = if (extended) b.getFloat(0x130).toDouble() else null
+        val heave = if (extended) b.getFloat(0x134).toDouble() else null
+        val surge = if (extended) b.getFloat(0x138).toDouble() else null
+        val energyRecovery = if (length >= SIZE_TILDE) b.getFloat(0x150).toDouble() else null
 
         // Wheel speed vs car speed -> slip ratio per corner (>1 = wheelspin).
         val slip = DoubleArray(4) { i ->
@@ -152,6 +185,17 @@ object Packet {
             posX = posX,
             posZ = posZ,
             carOrdinal = carCode,
+            yawRateRadS = yawRate,
+            bodyHeightM = bodyHeight,
+            suspensionM = suspension,
+            clutchPct = clutchPedal.coerceIn(0.0, 1.0) * 100.0,
+            clutchEngagement = clutchEngagement,
+            gearRatios = gearRatios,
+            steeringRad = steering,
+            sway = sway,
+            heave = heave,
+            surge = surge,
+            energyRecovery = energyRecovery,
         )
     }
 
@@ -199,6 +243,30 @@ data class Frame(
     val posX: Double,
     val posZ: Double,
     val carOrdinal: Int,
+    // ---- Chassis / driver-input channels (v0.5, feed the data logger) ----
+    /** Angular velocity around the vertical axis, rad/s (signed; cornering). */
+    val yawRateRadS: Double = 0.0,
+    /** Ride height of the body over the road, metres. */
+    val bodyHeightM: Double = 0.0,
+    /** Suspension travel per corner [FL, FR, RL, RR], metres. */
+    val suspensionM: DoubleArray = DoubleArray(4),
+    /** Clutch pedal, 0–100 %. */
+    val clutchPct: Double = 0.0,
+    /** Clutch engagement 0..1 (1 = fully engaged). */
+    val clutchEngagement: Double = 0.0,
+    /** Gear ratios for gears 1..8 (0 = gear not fitted). */
+    val gearRatios: DoubleArray = DoubleArray(0),
+    // ---- Extended-packet channels (GT7 ≥ 1.42, 'B'/'~' heartbeat only) ----
+    /** Steering wheel angle in radians (negative = left); null on old firmware. */
+    val steeringRad: Double? = null,
+    /** Lateral chassis acceleration channel (raw wire value). */
+    val sway: Double? = null,
+    /** Vertical chassis acceleration channel (raw wire value). */
+    val heave: Double? = null,
+    /** Longitudinal chassis acceleration channel (raw wire value). */
+    val surge: Double? = null,
+    /** Hybrid/EV energy recovery ('~' packet only). */
+    val energyRecovery: Double? = null,
 ) {
     // Arrays in a data class break equals()/hashCode(); we never compare
     // Frames for equality, so the generated ones are fine to leave.
