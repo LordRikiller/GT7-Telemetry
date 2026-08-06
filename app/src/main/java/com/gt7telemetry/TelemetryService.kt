@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import com.gt7telemetry.car.SetupProbe
 import com.gt7telemetry.logger.LapRecorder
 import com.gt7telemetry.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
@@ -128,6 +129,7 @@ class TelemetryService : Service() {
                         )
                         TelemetryRepository.publish(enriched)
                         LapRecorder.feed(enriched)
+                        SetupProbe.feed(enriched)
                     }
 
                     val now = System.currentTimeMillis()

@@ -34,10 +34,10 @@ exe. Enter the PS5's IP and drive.
 
 ## Using the app
 
-Once packets flow, mount the phone and drive. Four screens: the
-**dashboard** (the main instrument), the **data logger** (LOG), the **AI
-race engineer** (AI) and **Settings** (⚙). Both landscape and portrait
-have full layouts everywhere.
+Once packets flow, mount the phone and drive. Five screens: the
+**dashboard** (the main instrument), the **data logger** (LOG), the
+**setup sheet** (TUNE), the **AI race engineer** (AI) and **Settings**
+(⚙). Both landscape and portrait have full layouts everywhere.
 
 **What the instrument shows**
 
@@ -79,10 +79,24 @@ out — above the full lap traces. Steering needs GT7 ≥ 1.42 (the app asks
 the console for the extended telemetry packet and falls back automatically
 on older firmware).
 
+**The TUNE button — the car's setup, as far as it can be known.** GT7
+never transmits the settings sheet itself, but the stream reveals more
+than you'd think, and the app collects all of it per car: the **fitted
+gear ratios** (broadcast directly) with an **estimated final drive** and
+speed-at-limiter per gear (recovered from engine vs wheel speed), the
+**rev limiter** and the game's calculated top speed for the tune, **static
+ride height** (measured whenever you're at a standstill) and how low the
+body compresses under load, suspension travel used per corner, tyre radii,
+turbo + peak boost, EV detection, tank size and which driver aids were
+seen active. What physically never leaves the console — ARB, dampers,
+camber/toe, diff numbers, downforce clicks, power/ECU — has a describe-it-
+once field, and everything (measured + described) flows into the AI
+briefing automatically.
+
 **The AI button — your race engineer.** The app builds a *briefing*: car,
-your setup description, the lap table and a downsampled best-lap trace,
-framed as a request for concrete tuning changes. Two ways to use it, both
-free of surprises:
+setup (measured + described), the lap table and a downsampled best-lap
+trace, framed as a request for concrete tuning changes. Two ways to use
+it, both free of surprises:
 
 - **Share it** to any AI app you already pay for (ChatGPT, Claude, Gemini,
   Copilot…) via the Android share sheet — zero API cost.
@@ -155,6 +169,7 @@ app/src/main/java/com/gt7telemetry/
 ├── TelemetryService.kt     Foreground service: UDP 33740, '~' heartbeats, receive loop
 ├── MainActivity.kt         Service start, keep-screen-on, notif permission, Compose host
 ├── car/CarCatalog.kt       CarCode -> name/manufacturer (assets/gt7_car_catalog.json)
+├── car/SetupProbe.kt       Measures the obtainable setup (ratios, ride height, …)
 ├── dash/                   The cluster engine (9 families × 52 marque themes)
 ├── logger/LapRecorder.kt   60 Hz per-lap trace store + lap summaries
 ├── engineer/               Race-engineer briefing builder + one-shot API client

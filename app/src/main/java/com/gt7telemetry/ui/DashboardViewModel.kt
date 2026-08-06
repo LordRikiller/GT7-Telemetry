@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gt7telemetry.car.CarCatalog
+import com.gt7telemetry.car.SetupProbe
 import com.gt7telemetry.dash.DashLayout
 import com.gt7telemetry.engineer.Briefing
 import com.gt7telemetry.engineer.EngineerClient
@@ -93,7 +94,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun buildBriefing(laps: List<RecordedLap>): String {
         val ordinal = laps.lastOrNull()?.carOrdinal
         val car = CarCatalog.lookup(ordinal)?.name ?: ordinal?.takeIf { it != 0 }?.let { "GT7 car #$it" }
-        return Briefing.build(laps, car, setupNotes.value)
+        // Only attach measured setup that belongs to the recorded car.
+        val measured = SetupProbe.setup.value?.takeIf { ordinal == null || it.carOrdinal == ordinal }
+        return Briefing.build(laps, car, setupNotes.value, measured)
     }
 
     /**
