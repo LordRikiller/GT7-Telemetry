@@ -45,6 +45,8 @@ class TelemetryService : Service() {
 
     @Volatile private var running = false
     @Volatile private var ps5Ip: String = ""
+    @Volatile private var legacyPacket = false
+    @Volatile private var lastPacketSize = 0
     private var socket: DatagramSocket? = null
     private var worker: Thread? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -69,10 +71,11 @@ class TelemetryService : Service() {
         running = true
         TelemetryRepository.setStatus(Status(listening = true))
 
-        // Track the PS5 address setting live; the receive loop reads [ps5Ip].
-        scope.launch {
-            SettingsRepository(this@TelemetryService).ps5Ip.collect { ps5Ip = it.trim() }
-        }
+        // Track the PS5 address + packet-format settings live; the receive
+        // loop reads the @Volatile fields.
+        val settings = SettingsRepository(this@TelemetryService)
+        scope.launch { settings.ps5Ip.collect { ps5Ip = it.trim() } }
+        scope.launch { settings.legacyPacket.collect { legacyPacket = it } }
 
         worker = thread(name = "gt7-udp", isDaemon = true) {
             val buf = ByteArray(2048)
@@ -118,6 +121,7 @@ class TelemetryService : Service() {
                         windowCount++
                         sinceHeartbeat++
                         lastPacketAt = System.currentTimeMillis()
+                        lastPacketSize = packet.length
                         val enriched = frame.copy(
                             curLap = lapTimer.update(frame),
                             fuelPerLapPct = fuelTracker.update(frame),
@@ -145,19 +149,16 @@ class TelemetryService : Service() {
     private val lapTimer = LapTimer()
     private val fuelTracker = FuelTracker()
 
-    /** Heartbeats sent since the last received packet (drives the 'A' fallback). */
-    @Volatile private var quietHeartbeats = 0
-
     /** Send the heartbeat to the PS5. False when no valid IP is set yet. */
     private fun sendHeartbeat(s: DatagramSocket): Boolean {
         val ip = ps5Ip
         if (ip.isBlank()) return false
-        // Prefer the extended '~' packet; once the stream has been silent for
-        // a few heartbeats, alternate in the legacy 'A' request so pre-1.42
-        // firmware answers too. Any received packet resets the fallback.
-        if (lastPacketAt > 0 && System.currentTimeMillis() - lastPacketAt < 3000) quietHeartbeats = 0
-        val char = if (quietHeartbeats >= 4 && quietHeartbeats % 2 == 0) 'A' else '~'
-        quietHeartbeats++
+        // Always ask for the same format. GT7 appears to key the stream's
+        // packet format off the heartbeat around when the stream (re)starts,
+        // so mixing characters can pin a whole session to the legacy 296-byte
+        // packet (= no steering channel). '~' by default; the Settings toggle
+        // covers a pre-1.42 game that only answers 'A'.
+        val char = if (legacyPacket) 'A' else '~'
         return try {
             val payload = byteArrayOf(char.code.toByte())
             s.send(DatagramPacket(payload, payload.size, InetAddress.getByName(ip), SEND_PORT))
@@ -177,6 +178,7 @@ class TelemetryService : Service() {
                 packetsPerSec = rate,
                 everReceived = st.everReceived || lastPacketAt != 0L,
                 lastPacketAgeMs = ageNow(),
+                extendedPacket = lastPacketSize >= Packet.SIZE_B,
             )
         }
     }

@@ -93,6 +93,19 @@ fun SettingsScreen(viewModel: DashboardViewModel, onBack: () -> Unit) {
             Button(onClick = { viewModel.setPs5Ip(ipDraft) }, enabled = ipDraft.trim() != ps5Ip) { Text("Save") }
         }
 
+        Spacer(Modifier.height(12.dp))
+        val legacyPacket by viewModel.legacyPacket.collectAsStateWithLifecycle()
+        ToggleRow(
+            "Legacy telemetry packet",
+            if (legacyPacket) "296-byte 'A' — no steering channel"
+            else "Extended '~' — steering + chassis G (GT7 ≥ 1.42)",
+            legacyPacket,
+        ) { viewModel.setLegacyPacket(it) }
+        Text(
+            "Leave this off. Only switch it on if a very old GT7 version refuses to stream at all.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
+        )
+
         SectionDivider()
 
         // ---- Dashboard ----

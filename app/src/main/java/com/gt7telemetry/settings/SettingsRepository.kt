@@ -30,6 +30,7 @@ class SettingsRepository(private val context: Context) {
         val LAYOUT = stringPreferencesKey("manual_layout")
         val MPH = booleanPreferencesKey("use_mph")
         val FAHRENHEIT = booleanPreferencesKey("use_fahrenheit")
+        val LEGACY_PACKET = booleanPreferencesKey("legacy_packet")
         val ENGINEER_PROVIDER = stringPreferencesKey("engineer_provider")
         val ENGINEER_KEY = stringPreferencesKey("engineer_api_key")
         val ENGINEER_MODEL = stringPreferencesKey("engineer_model")
@@ -48,6 +49,12 @@ class SettingsRepository(private val context: Context) {
 
     val useMph: Flow<Boolean> = context.dataStore.data.map { it[Keys.MPH] ?: false }
     val useFahrenheit: Flow<Boolean> = context.dataStore.data.map { it[Keys.FAHRENHEIT] ?: false }
+
+    /**
+     * Heartbeat the legacy 'A' (296-byte packet, no steering) instead of '~'.
+     * Only needed for a GT7 older than 1.42 that won't answer '~' at all.
+     */
+    val legacyPacket: Flow<Boolean> = context.dataStore.data.map { it[Keys.LEGACY_PACKET] ?: false }
 
     val engineerProvider: Flow<EngineerProvider> = context.dataStore.data.map { p ->
         runCatching { EngineerProvider.valueOf(p[Keys.ENGINEER_PROVIDER] ?: "") }
@@ -68,6 +75,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setManualLayout(layout: String) = context.dataStore.edit { it[Keys.LAYOUT] = layout }
     suspend fun setUseMph(v: Boolean) = context.dataStore.edit { it[Keys.MPH] = v }
     suspend fun setUseFahrenheit(v: Boolean) = context.dataStore.edit { it[Keys.FAHRENHEIT] = v }
+    suspend fun setLegacyPacket(v: Boolean) = context.dataStore.edit { it[Keys.LEGACY_PACKET] = v }
     suspend fun setEngineerProvider(p: EngineerProvider) =
         context.dataStore.edit { it[Keys.ENGINEER_PROVIDER] = p.name }
     suspend fun setEngineerApiKey(k: String) = context.dataStore.edit { it[Keys.ENGINEER_KEY] = k.trim() }

@@ -111,6 +111,11 @@ fun LoggerScreen(
             Column(Modifier.padding(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Label("LIVE INPUTS · 20 s")
+                    if (status.live && !status.extendedPacket) {
+                        Spacer(Modifier.width(8.dp))
+                        Text("NO STEERING — LEGACY PACKET (SEE SETTINGS)", color = Palette.Hot,
+                            fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+                    }
                     Spacer(Modifier.weight(1f))
                     Legend("THROTTLE", TraceThrottle)
                     Legend("BRAKE", TraceBrake)

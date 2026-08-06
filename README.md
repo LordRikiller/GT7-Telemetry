@@ -124,8 +124,10 @@ picks up mid-race without missing a beat.
   loop on its own thread, surviving screen-off so a mounted phone keeps
   reading. GT7 answers with encrypted telemetry at 60 Hz. `'~'` requests
   the 344-byte extended packet (steering angle, chassis G, suspension
-  travel — GT7 ≥ 1.42); if nothing answers, the service alternates in the
-  legacy `'A'` so old firmware streams the 296-byte packet instead.
+  travel — GT7 ≥ 1.42). The heartbeat character is never mixed mid-session
+  (the console pins the stream format to it); a Settings toggle switches
+  to the legacy `'A'`/296-byte packet for a pre-1.42 game that won't
+  answer `'~'` at all.
 - `Packet.parse()` decrypts each "Simulator Interface" packet (Salsa20,
   key `"Simulator Interface Packet GT7 ver 0.0"[:32]`, nonce from the
   plaintext seed at 0x40 — XOR constant per format: 296 B `0xDEADBEAF`,
