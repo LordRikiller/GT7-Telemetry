@@ -77,6 +77,26 @@ class LapRecorderTest {
     }
 
     @Test
+    fun `bursty packet timing does not fabricate G spikes`() {
+        // UDP frames often land in bursts: six samples 1 ms apart, then a
+        // ~95 ms gap. With ±0.2 km/h of speed jitter on top of a steady
+        // 1 g acceleration, a naive per-frame derivative reads ±5 g spikes;
+        // the windowed derivative must stay near the true value.
+        for (i in 0 until 400) {
+            val t = (i / 6) * 0.1 + (i % 6) * 0.001
+            val jitter = if (i % 2 == 0) 0.2 else -0.2
+            val speed = 100.0 + 9.81 * 3.6 * t + jitter
+            LapRecorder.feed(base.copy(lapNumber = 3, curLap = t, speedKmh = speed))
+        }
+        LapRecorder.feed(at(4, 0.0, lastLap = 60.0))
+        val lap = LapRecorder.laps.value.single()
+        var maxAbs = 0.0
+        for (i in 0 until lap.sampleCount) maxAbs = maxOf(maxAbs, Math.abs(lap.longG[i].toDouble()))
+        assertTrue("windowed long-G should stay near 1 g, was $maxAbs", maxAbs < 2.0)
+        assertTrue("no fabricated braking (was ${lap.maxBrakingG})", lap.maxBrakingG < 1.0)
+    }
+
+    @Test
     fun `summaries derive from the traces`() {
         // Half the lap flat out, half coasting.
         for (i in 0 until 300) LapRecorder.feed(at(3, i / 60.0, throttle = 100.0))

@@ -65,7 +65,7 @@ object Briefing {
             appendLine("## Best lap trace — lap ${best.lapNumber}, ${fmtLap(best.lapTimeS)} (downsampled)")
             appendLine()
             if (!best.hasSteering) {
-                appendLine("(Steering channel unavailable — console firmware predates GT7 1.42.)")
+                appendLine("(Steering channel unavailable — the console sent the legacy packet this session.)")
                 appendLine()
             }
             appendLine("t_s,speed_kmh,throttle_pct,brake_pct,steer_deg,gear,lat_g,long_g")

@@ -10,6 +10,8 @@ data class Status(
     val packetsPerSec: Int = 0,
     val everReceived: Boolean = false,
     val lastPacketAgeMs: Long = Long.MAX_VALUE,
+    /** True when the console is answering with the ≥316-byte extended packet. */
+    val extendedPacket: Boolean = false,
 ) {
     /** True once packets have arrived and are still flowing. */
     val live: Boolean get() = everReceived && lastPacketAgeMs < 2000

@@ -80,6 +80,20 @@ object LapRecorder {
     /** Stop appending past this many samples (~12 min at 60 Hz) as a runaway guard. */
     private const val MAX_SAMPLES = 45_000
 
+    /**
+     * Minimum time base for the speed derivative. UDP packets arrive in
+     * bursts, so consecutive-frame dt can be a millisecond — differencing
+     * over that produces physically impossible ±30 G spikes. Differencing
+     * against a sample at least this far back keeps long-G honest.
+     */
+    private const val LONG_G_WINDOW_S = 0.08
+
+    /** Hard cap — nothing on wheels brakes at more than this. */
+    private const val LONG_G_MAX = 6.0
+
+    /** Smoothing factor for lateral G (yaw rate × speed is spiky over kerbs). */
+    private const val LAT_G_EMA = 0.30
+
     private val _laps = MutableStateFlow<List<RecordedLap>>(emptyList())
     val laps: StateFlow<List<RecordedLap>> = _laps.asStateFlow()
 
@@ -88,8 +102,15 @@ object LapRecorder {
     val recordingLap: StateFlow<Int> = _recordingLap.asStateFlow()
 
     private var builder: Builder? = null
-    private var prevSpeedMs = 0.0
     private var prevT = -1.0
+
+    // Short (t, speed) history for the long-G derivative window.
+    private const val HIST_CAP = 32
+    private val histT = DoubleArray(HIST_CAP)
+    private val histV = DoubleArray(HIST_CAP)
+    private var histHead = 0
+    private var histSize = 0
+    private var latGSmooth = Double.NaN
 
     fun feed(frame: Frame) {
         if (!frame.onTrack || frame.lapNumber <= 0) {
@@ -108,20 +129,38 @@ object LapRecorder {
             }
             builder = Builder(frame.lapNumber, frame.carOrdinal)
             _recordingLap.value = frame.lapNumber
-            prevSpeedMs = frame.speedKmh / 3.6
             prevT = -1.0
+            histSize = 0
+            histHead = 0
+            latGSmooth = Double.NaN
         }
 
         val b = builder ?: return
         val t = frame.curLap
         if (t <= prevT || b.size >= MAX_SAMPLES) return // duplicate/stalled clock
         val speedMs = frame.speedKmh / 3.6
-        val dt = if (prevT < 0) 0.0 else t - prevT
-        val longG = if (dt in 1e-4..0.5) (speedMs - prevSpeedMs) / dt / 9.81 else 0.0
-        val latG = frame.yawRateRadS * speedMs / 9.81
-        b.add(frame, t, latG, longG)
+
+        // Long G: difference against the most recent sample ≥ the window back.
+        var longG = 0.0
+        for (k in 1 until histSize + 1) {
+            val idx = (histHead - k + HIST_CAP * 2) % HIST_CAP
+            val dt = t - histT[idx]
+            if (dt >= LONG_G_WINDOW_S) {
+                longG = ((speedMs - histV[idx]) / dt / 9.81).coerceIn(-LONG_G_MAX, LONG_G_MAX)
+                break
+            }
+        }
+        histT[histHead] = t
+        histV[histHead] = speedMs
+        histHead = (histHead + 1) % HIST_CAP
+        if (histSize < HIST_CAP) histSize++
+
+        val latRaw = frame.yawRateRadS * speedMs / 9.81
+        latGSmooth = if (latGSmooth.isNaN()) latRaw
+        else latGSmooth + (latRaw - latGSmooth) * LAT_G_EMA
+
+        b.add(frame, t, latGSmooth, longG)
         prevT = t
-        prevSpeedMs = speedMs
     }
 
     /** Drop everything (UI "clear session"). */

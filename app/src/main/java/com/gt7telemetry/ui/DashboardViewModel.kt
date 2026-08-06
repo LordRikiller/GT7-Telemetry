@@ -44,6 +44,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         settings.useMph.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val useFahrenheit: StateFlow<Boolean> =
         settings.useFahrenheit.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val legacyPacket: StateFlow<Boolean> =
+        settings.legacyPacket.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Bumped whenever the car catalog gains data (bundled load, live refresh). */
     private val _catalogRevision = MutableStateFlow(0)
@@ -131,6 +133,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun setManualLayout(layout: DashLayout) = viewModelScope.launch { settings.setManualLayout(layout.name) }
     fun setUseMph(v: Boolean) = viewModelScope.launch { settings.setUseMph(v) }
     fun setUseFahrenheit(v: Boolean) = viewModelScope.launch { settings.setUseFahrenheit(v) }
+    fun setLegacyPacket(v: Boolean) = viewModelScope.launch { settings.setLegacyPacket(v) }
 
     fun checkForUpdates() {
         viewModelScope.launch {
