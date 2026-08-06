@@ -3,6 +3,7 @@ package com.gt7telemetry.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -164,39 +168,72 @@ private fun TopBar(
     onOpenEngineer: () -> Unit,
     onOpenSetup: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        val (txt, col) = when {
-            status.live && raceOn -> "LIVE" to theme.good
-            status.live && inMenus -> "IN MENUS" to theme.mute
-            status.live -> "PAUSED" to theme.warn
-            status.everReceived -> "NO PACKETS" to theme.redline
-            else -> "WAITING…" to theme.mute
-        }
-        Box(Modifier.clip(RoundedCornerShape(6.dp)).background(col.copy(alpha = 0.16f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-            Text(txt, color = col, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-        }
-        Spacer(Modifier.width(8.dp))
-        Text("$pkt pkt/s", color = theme.ink2, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-        Spacer(Modifier.weight(1f))
-        if (carName != null) {
-            Column(horizontalAlignment = Alignment.End) {
-                Text(carName, color = theme.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Text(layoutLabel, color = theme.mute, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
+    // Six inline pills never fit next to a car name on a phone-width bar —
+    // below this width the actions collapse into one ☰ menu.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 620.dp
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val (txt, col) = when {
+                status.live && raceOn -> "LIVE" to theme.good
+                status.live && inMenus -> "IN MENUS" to theme.mute
+                status.live -> "PAUSED" to theme.warn
+                status.everReceived -> "NO PACKETS" to theme.redline
+                else -> "WAITING…" to theme.mute
             }
-            Spacer(Modifier.width(10.dp))
+            Box(Modifier.clip(RoundedCornerShape(6.dp)).background(col.copy(alpha = 0.16f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                Text(txt, color = col, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            }
+            if (!compact) {
+                Spacer(Modifier.width(8.dp))
+                Text("$pkt pkt/s", color = theme.ink2, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            }
+            Spacer(Modifier.weight(1f))
+            if (carName != null) {
+                // Never let a long car name shove the buttons off-screen.
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(3f, fill = false)) {
+                    Text(carName, color = theme.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(layoutLabel, color = theme.mute, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.6.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Spacer(Modifier.width(10.dp))
+            }
+            if (compact) {
+                var open by remember { mutableStateOf(false) }
+                Box {
+                    Toggle("☰", theme) { open = true }
+                    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                        MenuEntry("Data logger") { open = false; onOpenLogger() }
+                        MenuEntry("Tuning / setup") { open = false; onOpenSetup() }
+                        MenuEntry("AI race engineer") { open = false; onOpenEngineer() }
+                        MenuEntry("Speed: ${if (useMph) "mph" else "km/h"}  ›  ${if (useMph) "km/h" else "mph"}") { onToggleSpeed() }
+                        MenuEntry("Temps: ${if (useFahrenheit) "°F" else "°C"}  ›  ${if (useFahrenheit) "°C" else "°F"}") { onToggleTemp() }
+                        MenuEntry("Settings") { open = false; onOpenSettings() }
+                    }
+                }
+            } else {
+                Toggle("LOG", theme, onOpenLogger)
+                Spacer(Modifier.width(6.dp))
+                Toggle("TUNE", theme, onOpenSetup)
+                Spacer(Modifier.width(6.dp))
+                Toggle("AI", theme, onOpenEngineer)
+                Spacer(Modifier.width(6.dp))
+                Toggle(if (useMph) "mph" else "km/h", theme, onToggleSpeed)
+                Spacer(Modifier.width(6.dp))
+                Toggle(if (useFahrenheit) "°F" else "°C", theme, onToggleTemp)
+                Spacer(Modifier.width(6.dp))
+                Toggle("⚙", theme, onOpenSettings)
+            }
         }
-        Toggle("LOG", theme, onOpenLogger)
-        Spacer(Modifier.width(6.dp))
-        Toggle("TUNE", theme, onOpenSetup)
-        Spacer(Modifier.width(6.dp))
-        Toggle("AI", theme, onOpenEngineer)
-        Spacer(Modifier.width(6.dp))
-        Toggle(if (useMph) "mph" else "km/h", theme, onToggleSpeed)
-        Spacer(Modifier.width(6.dp))
-        Toggle(if (useFahrenheit) "°F" else "°C", theme, onToggleTemp)
-        Spacer(Modifier.width(6.dp))
-        Toggle("⚙", theme, onOpenSettings)
     }
+}
+
+@Composable
+private fun MenuEntry(label: String, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label, fontSize = 14.sp) },
+        onClick = onClick,
+    )
 }
 
 @Composable
