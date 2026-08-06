@@ -44,7 +44,12 @@ import com.gt7telemetry.settings.DashMode
 import com.gt7telemetry.update.UpdateState
 
 @Composable
-fun DashboardScreen(viewModel: DashboardViewModel, onOpenSettings: () -> Unit) {
+fun DashboardScreen(
+    viewModel: DashboardViewModel,
+    onOpenSettings: () -> Unit,
+    onOpenLogger: () -> Unit,
+    onOpenEngineer: () -> Unit,
+) {
     val frame by TelemetryRepository.frame.collectAsStateWithLifecycle()
     val status by TelemetryRepository.status.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
@@ -76,6 +81,8 @@ fun DashboardScreen(viewModel: DashboardViewModel, onOpenSettings: () -> Unit) {
             onToggleSpeed = { viewModel.setUseMph(!useMph) },
             onToggleTemp = { viewModel.setUseFahrenheit(!useFahrenheit) },
             onOpenSettings = onOpenSettings,
+            onOpenLogger = onOpenLogger,
+            onOpenEngineer = onOpenEngineer,
         )
         Spacer(Modifier.height(10.dp))
         Box(Modifier.weight(1f)) {
@@ -115,6 +122,8 @@ private fun TopBar(
     onToggleSpeed: () -> Unit,
     onToggleTemp: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenLogger: () -> Unit,
+    onOpenEngineer: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         val (txt, col) = when {
@@ -136,6 +145,10 @@ private fun TopBar(
             }
             Spacer(Modifier.width(10.dp))
         }
+        Toggle("LOG", theme, onOpenLogger)
+        Spacer(Modifier.width(6.dp))
+        Toggle("AI", theme, onOpenEngineer)
+        Spacer(Modifier.width(6.dp))
         Toggle(if (useMph) "mph" else "km/h", theme, onToggleSpeed)
         Spacer(Modifier.width(6.dp))
         Toggle(if (useFahrenheit) "°F" else "°C", theme, onToggleTemp)

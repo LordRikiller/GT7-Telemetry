@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import com.gt7telemetry.logger.LapRecorder
 import com.gt7telemetry.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,9 +26,15 @@ import java.net.InetSocketAddress
  *
  * Unlike Forza's "Data Out" (game pushes to an address you type in-game), a
  * PS5 sends telemetry only while it keeps receiving heartbeats: we bind UDP
- * 33740 and send a 1-byte 'A' to the console's port 33739 — on start, every
- * 100 received packets (~1.7 s at 60 Hz) and whenever the stream goes quiet.
- * The console then streams encrypted packets back at 60 Hz.
+ * 33740 and send a 1-byte heartbeat to the console's port 33739 — on start,
+ * every 100 received packets (~1.7 s at 60 Hz) and whenever the stream goes
+ * quiet. The console then streams encrypted packets back at 60 Hz.
+ *
+ * The heartbeat byte selects the packet format: we ask for '~' (344-byte
+ * extended packet with steering angle + chassis G, GT7 ≥ 1.42). If nothing
+ * ever arrives after several heartbeats we alternate in the legacy 'A' so
+ * consoles on old firmware still stream the 296-byte packet — the parser
+ * accepts either.
  *
  * Runs the blocking receive loop on its own thread and pushes parsed frames
  * into [TelemetryRepository]. Survives the screen turning off so a mounted
@@ -111,10 +118,12 @@ class TelemetryService : Service() {
                         windowCount++
                         sinceHeartbeat++
                         lastPacketAt = System.currentTimeMillis()
-                        TelemetryRepository.publish(frame.copy(
+                        val enriched = frame.copy(
                             curLap = lapTimer.update(frame),
                             fuelPerLapPct = fuelTracker.update(frame),
-                        ))
+                        )
+                        TelemetryRepository.publish(enriched)
+                        LapRecorder.feed(enriched)
                     }
 
                     val now = System.currentTimeMillis()
@@ -136,12 +145,21 @@ class TelemetryService : Service() {
     private val lapTimer = LapTimer()
     private val fuelTracker = FuelTracker()
 
-    /** Send the 'A' heartbeat to the PS5. False when no valid IP is set yet. */
+    /** Heartbeats sent since the last received packet (drives the 'A' fallback). */
+    @Volatile private var quietHeartbeats = 0
+
+    /** Send the heartbeat to the PS5. False when no valid IP is set yet. */
     private fun sendHeartbeat(s: DatagramSocket): Boolean {
         val ip = ps5Ip
         if (ip.isBlank()) return false
+        // Prefer the extended '~' packet; once the stream has been silent for
+        // a few heartbeats, alternate in the legacy 'A' request so pre-1.42
+        // firmware answers too. Any received packet resets the fallback.
+        if (lastPacketAt > 0 && System.currentTimeMillis() - lastPacketAt < 3000) quietHeartbeats = 0
+        val char = if (quietHeartbeats >= 4 && quietHeartbeats % 2 == 0) 'A' else '~'
+        quietHeartbeats++
         return try {
-            val payload = byteArrayOf('A'.code.toByte())
+            val payload = byteArrayOf(char.code.toByte())
             s.send(DatagramPacket(payload, payload.size, InetAddress.getByName(ip), SEND_PORT))
             true
         } catch (_: Exception) {

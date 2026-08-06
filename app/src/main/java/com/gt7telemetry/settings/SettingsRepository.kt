@@ -13,6 +13,12 @@ import kotlinx.coroutines.flow.map
 /** How the active dashboard layout is chosen. */
 enum class DashMode { AUTO, MANUAL }
 
+/** Which API the built-in race engineer talks to (with the user's own key). */
+enum class EngineerProvider(val label: String, val defaultModel: String, val keyHint: String) {
+    ANTHROPIC("Claude (Anthropic)", "claude-sonnet-5", "sk-ant-…  (console.anthropic.com)"),
+    GEMINI("Gemini (Google)", "gemini-2.5-flash", "AIza…  (aistudio.google.com — free tier)"),
+}
+
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "gt7_settings")
 
 /** DataStore-backed user preferences: PS5 address, dashboard selection + display units. */
@@ -24,6 +30,10 @@ class SettingsRepository(private val context: Context) {
         val LAYOUT = stringPreferencesKey("manual_layout")
         val MPH = booleanPreferencesKey("use_mph")
         val FAHRENHEIT = booleanPreferencesKey("use_fahrenheit")
+        val ENGINEER_PROVIDER = stringPreferencesKey("engineer_provider")
+        val ENGINEER_KEY = stringPreferencesKey("engineer_api_key")
+        val ENGINEER_MODEL = stringPreferencesKey("engineer_model")
+        val SETUP_NOTES = stringPreferencesKey("setup_notes")
     }
 
     /** The console's LAN IP — where heartbeats go. Blank until the user sets it. */
@@ -39,9 +49,28 @@ class SettingsRepository(private val context: Context) {
     val useMph: Flow<Boolean> = context.dataStore.data.map { it[Keys.MPH] ?: false }
     val useFahrenheit: Flow<Boolean> = context.dataStore.data.map { it[Keys.FAHRENHEIT] ?: false }
 
+    val engineerProvider: Flow<EngineerProvider> = context.dataStore.data.map { p ->
+        runCatching { EngineerProvider.valueOf(p[Keys.ENGINEER_PROVIDER] ?: "") }
+            .getOrDefault(EngineerProvider.ANTHROPIC)
+    }
+
+    /** The user's own API key, stored only on-device. Blank = built-in engineer off. */
+    val engineerApiKey: Flow<String> = context.dataStore.data.map { it[Keys.ENGINEER_KEY] ?: "" }
+
+    /** Model override; blank = the provider's default. */
+    val engineerModel: Flow<String> = context.dataStore.data.map { it[Keys.ENGINEER_MODEL] ?: "" }
+
+    /** Free-text description of the car's current tune (GT7 doesn't broadcast it). */
+    val setupNotes: Flow<String> = context.dataStore.data.map { it[Keys.SETUP_NOTES] ?: "" }
+
     suspend fun setPs5Ip(ip: String) = context.dataStore.edit { it[Keys.PS5_IP] = ip.trim() }
     suspend fun setDashMode(mode: DashMode) = context.dataStore.edit { it[Keys.MODE] = mode.name }
     suspend fun setManualLayout(layout: String) = context.dataStore.edit { it[Keys.LAYOUT] = layout }
     suspend fun setUseMph(v: Boolean) = context.dataStore.edit { it[Keys.MPH] = v }
     suspend fun setUseFahrenheit(v: Boolean) = context.dataStore.edit { it[Keys.FAHRENHEIT] = v }
+    suspend fun setEngineerProvider(p: EngineerProvider) =
+        context.dataStore.edit { it[Keys.ENGINEER_PROVIDER] = p.name }
+    suspend fun setEngineerApiKey(k: String) = context.dataStore.edit { it[Keys.ENGINEER_KEY] = k.trim() }
+    suspend fun setEngineerModel(m: String) = context.dataStore.edit { it[Keys.ENGINEER_MODEL] = m.trim() }
+    suspend fun setSetupNotes(n: String) = context.dataStore.edit { it[Keys.SETUP_NOTES] = n }
 }
