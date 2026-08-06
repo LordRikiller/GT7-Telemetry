@@ -4,6 +4,7 @@ import com.gt7telemetry.car.MeasuredSetup
 import com.gt7telemetry.logger.RecordedLap
 import java.util.Locale
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Builds the "race engineer briefing": a self-contained plain-text prompt
@@ -100,16 +101,30 @@ object Briefing {
                 appendLine()
             }
             appendLine("t_s,speed_kmh,throttle_pct,brake_pct,steer_deg,gear,lat_g,long_g")
+            // Each row AGGREGATES its whole window from the 60 Hz log rather
+            // than point-sampling one instant — a 0.2 s shift cut then reads
+            // as slightly reduced mean throttle instead of a misleading 0.
             val step = max(1, best.sampleCount / MAX_TRACE_ROWS)
             var i = 0
             while (i < best.sampleCount) {
-                val steer = best.steerDeg[i]
+                val end = min(i + step, best.sampleCount)
+                var thr = 0.0; var brk = 0.0; var steerSum = 0.0; var steerN = 0
+                var latPeak = 0.0; var lonPeak = 0.0
+                for (j in i until end) {
+                    thr += best.throttlePct[j]
+                    brk += best.brakePct[j]
+                    val s = best.steerDeg[j]
+                    if (!s.isNaN()) { steerSum += s; steerN++ }
+                    if (kotlin.math.abs(best.latG[j].toDouble()) > kotlin.math.abs(latPeak)) latPeak = best.latG[j].toDouble()
+                    if (kotlin.math.abs(best.longG[j].toDouble()) > kotlin.math.abs(lonPeak)) lonPeak = best.longG[j].toDouble()
+                }
+                val n = (end - i).toDouble()
                 appendLine(
                     "%.1f,%.0f,%.0f,%.0f,%s,%.0f,%.2f,%.2f".fmt(
                         best.t[i].toDouble(), best.speedKmh[i].toDouble(),
-                        best.throttlePct[i].toDouble(), best.brakePct[i].toDouble(),
-                        if (steer.isNaN()) "" else "%.0f".fmt(steer.toDouble()),
-                        best.gear[i].toDouble(), best.latG[i].toDouble(), best.longG[i].toDouble(),
+                        thr / n, brk / n,
+                        if (steerN == 0) "" else "%.0f".fmt(steerSum / steerN),
+                        best.gear[i].toDouble(), latPeak, lonPeak,
                     )
                 )
                 i += step
@@ -118,6 +133,9 @@ object Briefing {
         appendLine()
         appendLine("Channels: speed km/h · pedals 0–100 % · steer = wheel angle in degrees")
         appendLine("(negative = left) · lat_g signed cornering load · long_g + accel / − braking.")
+        appendLine("Each row covers the window to the next row: pedals/steer are window MEANS")
+        appendLine("(sequential-shift throttle cuts show as briefly reduced throttle, not 0),")
+        appendLine("lat_g/long_g are the window's signed peaks; speed and gear are at row start.")
     }
 
     fun fmtLap(s: Double): String = if (s <= 0) "—" else {
