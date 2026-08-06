@@ -1,5 +1,6 @@
 package com.gt7telemetry.engineer
 
+import com.gt7telemetry.car.MeasuredSetup
 import com.gt7telemetry.logger.RecordedLap
 import java.util.Locale
 import kotlin.math.max
@@ -20,6 +21,7 @@ object Briefing {
         laps: List<RecordedLap>,
         carName: String?,
         setupNotes: String,
+        measured: MeasuredSetup? = null,
     ): String = buildString {
         val best = laps.filter { it.lapTimeS > 0 }.minByOrNull { it.lapTimeS } ?: laps.lastOrNull()
 
@@ -43,9 +45,38 @@ object Briefing {
             appendLine(setupNotes.trim())
         }
         appendLine()
-        appendLine("(GT7's telemetry stream does not broadcast settings-sheet values, so the setup")
-        appendLine("above is the driver's own description; the telemetry below is measured.)")
+        appendLine("(GT7's telemetry stream does not broadcast most settings-sheet values, so the")
+        appendLine("setup above is the driver's own description; everything below is measured.)")
         appendLine()
+        if (measured != null) {
+            appendLine("## Setup data read/measured from the stream")
+            val fitted = measured.gearRatios.withIndex().filter { it.value > 0.05 }
+            if (fitted.isNotEmpty()) {
+                append("- Gear ratios (fitted): ")
+                appendLine(fitted.joinToString(" · ") { (i, r) -> "${i + 1}: ${"%.3f".fmt(r)}" })
+            }
+            measured.finalDriveEst?.let { appendLine("- Final drive (estimated): ${"%.3f".fmt(it)}") }
+            if (measured.revLimiterRpm > 0) appendLine("- Rev limiter: ${measured.revLimiterRpm} rpm")
+            if (measured.calcMaxSpeedKmh > 0)
+                appendLine("- Game's calculated top speed for this tune: ${measured.calcMaxSpeedKmh} km/h" +
+                    " (fastest actually reached: ${"%.0f".fmt(measured.maxSpeedSeenKmh)} km/h)")
+            measured.rideHeightStaticMm?.let {
+                append("- Ride height, static (measured at standstill): ${"%.0f".fmt(it)} mm")
+                measured.rideHeightMinMm?.let { mn -> append(" — compresses to ${"%.0f".fmt(mn)} mm under load") }
+                appendLine()
+            }
+            val t = measured.suspTravelMm
+            if (t.any { it > 0.1 })
+                appendLine("- Suspension travel used (mm): FL ${"%.0f".fmt(t[0])} / FR ${"%.0f".fmt(t[1])} / RL ${"%.0f".fmt(t[2])} / RR ${"%.0f".fmt(t[3])}")
+            if (measured.tyreRadiusM.getOrNull(0)?.let { it > 0.01 } == true)
+                appendLine("- Tyre radius: front ${"%.0f".fmt(measured.tyreRadiusM[0] * 1000)} mm, rear ${"%.0f".fmt(measured.tyreRadiusM[2] * 1000)} mm")
+            if (measured.hasTurbo) appendLine("- Turbo fitted — peak boost seen ${"%.1f".fmt(measured.maxBoostPsi)} psi")
+            if (measured.electric == true) appendLine("- Electric drivetrain")
+            if (measured.fuelCapacityL > 0.5) appendLine("- Fuel tank: ${"%.0f".fmt(measured.fuelCapacityL)} L")
+            val aids = listOfNotNull("TCS".takeIf { measured.tcsSeen }, "ASM".takeIf { measured.asmSeen })
+            if (aids.isNotEmpty()) appendLine("- Driver aids seen active: ${aids.joinToString(", ")}")
+            appendLine()
+        }
         appendLine("## Laps recorded (${laps.size})")
         appendLine()
         appendLine("| Lap | Time | Max km/h | Min km/h | Full throttle | Braking | Coasting | Max lat G | Max brake G |")

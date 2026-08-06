@@ -49,6 +49,7 @@ fun DashboardScreen(
     onOpenSettings: () -> Unit,
     onOpenLogger: () -> Unit,
     onOpenEngineer: () -> Unit,
+    onOpenSetup: () -> Unit,
 ) {
     val frame by TelemetryRepository.frame.collectAsStateWithLifecycle()
     val status by TelemetryRepository.status.collectAsStateWithLifecycle()
@@ -83,6 +84,7 @@ fun DashboardScreen(
             onOpenSettings = onOpenSettings,
             onOpenLogger = onOpenLogger,
             onOpenEngineer = onOpenEngineer,
+            onOpenSetup = onOpenSetup,
         )
         Spacer(Modifier.height(10.dp))
         Box(Modifier.weight(1f)) {
@@ -124,6 +126,7 @@ private fun TopBar(
     onOpenSettings: () -> Unit,
     onOpenLogger: () -> Unit,
     onOpenEngineer: () -> Unit,
+    onOpenSetup: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         val (txt, col) = when {
@@ -146,6 +149,8 @@ private fun TopBar(
             Spacer(Modifier.width(10.dp))
         }
         Toggle("LOG", theme, onOpenLogger)
+        Spacer(Modifier.width(6.dp))
+        Toggle("TUNE", theme, onOpenSetup)
         Spacer(Modifier.width(6.dp))
         Toggle("AI", theme, onOpenEngineer)
         Spacer(Modifier.width(6.dp))

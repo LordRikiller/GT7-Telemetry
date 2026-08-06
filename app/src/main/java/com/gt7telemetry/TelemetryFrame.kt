@@ -100,6 +100,7 @@ object Packet {
         val preRacePosition = b.getShort(0x84).toInt()
         val rpmAlertMin = (b.getShort(0x88).toInt() and 0xFFFF).toDouble()
         val rpmAlertMax = (b.getShort(0x8A).toInt() and 0xFFFF).toDouble()
+        val calcMaxSpeed = b.getShort(0x8C).toInt() and 0xFFFF // game's est. top speed, km/h
         val flags = b.getShort(0x8E).toInt() and 0xFFFF
         val gearByte = b.get(0x90).toInt() and 0xFF
         val throttle = b.get(0x91).toInt() and 0xFF
@@ -120,13 +121,15 @@ object Packet {
         val sway = if (extended) b.getFloat(0x130).toDouble() else null
         val heave = if (extended) b.getFloat(0x134).toDouble() else null
         val surge = if (extended) b.getFloat(0x138).toDouble() else null
+        val carType = if (length >= SIZE_TILDE) b.get(0x13E).toInt() and 0xFF else null
         val energyRecovery = if (length >= SIZE_TILDE) b.getFloat(0x150).toDouble() else null
+
+        val wheelRps = DoubleArray(4) { b.getFloat(0xA4 + it * 4).toDouble() }
+        val tyreRadius = DoubleArray(4) { b.getFloat(0xB4 + it * 4).toDouble() }
 
         // Wheel speed vs car speed -> slip ratio per corner (>1 = wheelspin).
         val slip = DoubleArray(4) { i ->
-            val revPerS = b.getFloat(0xA4 + i * 4).toDouble()
-            val radius = b.getFloat(0xB4 + i * 4).toDouble()
-            val wheelMs = kotlin.math.abs(revPerS * radius)
+            val wheelMs = kotlin.math.abs(wheelRps[i] * tyreRadius[i])
             if (speedMs > 1.0) wheelMs / speedMs else 0.0
         }
 
@@ -191,6 +194,10 @@ object Packet {
             clutchPct = clutchPedal.coerceIn(0.0, 1.0) * 100.0,
             clutchEngagement = clutchEngagement,
             gearRatios = gearRatios,
+            calcMaxSpeedKmh = calcMaxSpeed,
+            wheelRps = wheelRps,
+            tyreRadiusM = tyreRadius,
+            carType = carType,
             steeringRad = steering,
             sway = sway,
             heave = heave,
@@ -256,6 +263,14 @@ data class Frame(
     val clutchEngagement: Double = 0.0,
     /** Gear ratios for gears 1..8 (0 = gear not fitted). */
     val gearRatios: DoubleArray = DoubleArray(0),
+    /** The game's own estimated top speed for the current tune, km/h (0 = unknown). */
+    val calcMaxSpeedKmh: Int = 0,
+    /** Wheel revolutions per second [FL, FR, RL, RR] (signed). */
+    val wheelRps: DoubleArray = DoubleArray(4),
+    /** Tyre radius per corner, metres [FL, FR, RL, RR]. */
+    val tyreRadiusM: DoubleArray = DoubleArray(4),
+    /** Drivetrain type byte from the '~' packet (4 = electric); null otherwise. */
+    val carType: Int? = null,
     // ---- Extended-packet channels (GT7 ≥ 1.42, 'B'/'~' heartbeat only) ----
     /** Steering wheel angle in radians (negative = left); null on old firmware. */
     val steeringRad: Double? = null,
