@@ -38,6 +38,10 @@ object Briefing {
         appendLine()
         appendLine("## Car")
         appendLine("- ${carName ?: "Unknown car"}")
+        val tyres = laps.lastOrNull { it.tyres.isNotBlank() }?.tyres
+        appendLine("- Tyres (driver-declared): ${tyres ?: "not declared"}")
+        appendLine("  (GT7 broadcasts neither the tyre compound nor tyre wear — compound is the")
+        appendLine("  driver's declaration; tyre temperatures below are measured.)")
         appendLine()
         appendLine("## Current setup (as described by the driver)")
         if (setupNotes.isBlank()) {
@@ -80,17 +84,29 @@ object Briefing {
         }
         appendLine("## Laps recorded (${laps.size})")
         appendLine()
-        appendLine("| Lap | Time | Max km/h | Min km/h | Full throttle | Braking | Coasting | Max lat G | Max brake G |")
-        appendLine("|---|---|---|---|---|---|---|---|---|")
+        appendLine("| Lap | Time | Max km/h | Min km/h | Full throttle | Braking | Coasting | Max lat G | Max brake G | Avg tyre °C F/R |")
+        appendLine("|---|---|---|---|---|---|---|---|---|---|")
         for (lap in laps) {
+            val tf = lap.avgTyreTempF
+            val tr = lap.avgTyreTempR
             appendLine(
                 "| ${lap.lapNumber}${if (lap === best) " (best)" else ""} " +
                     "| ${fmtLap(lap.lapTimeS)} " +
                     "| ${"%.0f".fmt(lap.maxSpeedKmh)} | ${"%.0f".fmt(lap.minSpeedKmh)} " +
                     "| ${"%.0f%%".fmt(lap.fullThrottlePct)} | ${"%.0f%%".fmt(lap.brakingPct)} " +
                     "| ${"%.0f%%".fmt(lap.coastingPct)} " +
-                    "| ${"%.2f".fmt(lap.maxLatG)} | ${"%.2f".fmt(lap.maxBrakingG)} |"
+                    "| ${"%.2f".fmt(lap.maxLatG)} | ${"%.2f".fmt(lap.maxBrakingG)} " +
+                    "| ${if (tf != null && tr != null) "%.0f / %.0f".fmt(tf, tr) else "—"} |"
             )
+        }
+        // Per-corner temps expose left/right and camber balance the F/R
+        // averages hide — one line for the best lap keeps it cheap.
+        best?.takeIf { it.hasTyreTemps }?.let { b ->
+            fun avg(a: FloatArray): Double = (0 until b.sampleCount).sumOf { a[it].toDouble() } / b.sampleCount
+            appendLine()
+            appendLine("Best-lap tyre temperatures by corner (mean °C): " +
+                "FL ${"%.0f".fmt(avg(b.tyreFL))} · FR ${"%.0f".fmt(avg(b.tyreFR))} · " +
+                "RL ${"%.0f".fmt(avg(b.tyreRL))} · RR ${"%.0f".fmt(avg(b.tyreRR))}")
         }
         if (best != null) {
             appendLine()
@@ -100,7 +116,7 @@ object Briefing {
                 appendLine("(Steering channel unavailable — the console sent the legacy packet this session.)")
                 appendLine()
             }
-            appendLine("t_s,speed_kmh,throttle_pct,brake_pct,steer_deg,gear,lat_g,long_g")
+            appendLine("t_s,speed_kmh,throttle_pct,brake_pct,steer_deg,gear,rpm,lat_g,long_g")
             // Each row AGGREGATES its whole window from the 60 Hz log rather
             // than point-sampling one instant — a 0.2 s shift cut then reads
             // as slightly reduced mean throttle instead of a misleading 0.
@@ -108,11 +124,12 @@ object Briefing {
             var i = 0
             while (i < best.sampleCount) {
                 val end = min(i + step, best.sampleCount)
-                var thr = 0.0; var brk = 0.0; var steerSum = 0.0; var steerN = 0
+                var thr = 0.0; var brk = 0.0; var rpmSum = 0.0; var steerSum = 0.0; var steerN = 0
                 var latPeak = 0.0; var lonPeak = 0.0
                 for (j in i until end) {
                     thr += best.throttlePct[j]
                     brk += best.brakePct[j]
+                    rpmSum += best.rpm[j]
                     val s = best.steerDeg[j]
                     if (!s.isNaN()) { steerSum += s; steerN++ }
                     if (kotlin.math.abs(best.latG[j].toDouble()) > kotlin.math.abs(latPeak)) latPeak = best.latG[j].toDouble()
@@ -120,11 +137,11 @@ object Briefing {
                 }
                 val n = (end - i).toDouble()
                 appendLine(
-                    "%.1f,%.0f,%.0f,%.0f,%s,%.0f,%.2f,%.2f".fmt(
+                    "%.1f,%.0f,%.0f,%.0f,%s,%.0f,%.0f,%.2f,%.2f".fmt(
                         best.t[i].toDouble(), best.speedKmh[i].toDouble(),
                         thr / n, brk / n,
                         if (steerN == 0) "" else "%.0f".fmt(steerSum / steerN),
-                        best.gear[i].toDouble(), latPeak, lonPeak,
+                        best.gear[i].toDouble(), rpmSum / n, latPeak, lonPeak,
                     )
                 )
                 i += step
@@ -132,10 +149,11 @@ object Briefing {
         }
         appendLine()
         appendLine("Channels: speed km/h · pedals 0–100 % · steer = wheel angle in degrees")
-        appendLine("(negative = left) · lat_g signed cornering load · long_g + accel / − braking.")
-        appendLine("Each row covers the window to the next row: pedals/steer are window MEANS")
-        appendLine("(sequential-shift throttle cuts show as briefly reduced throttle, not 0),")
-        appendLine("lat_g/long_g are the window's signed peaks; speed and gear are at row start.")
+        appendLine("(negative = left) · rpm engine speed · lat_g signed cornering load ·")
+        appendLine("long_g + accel / − braking. Each row covers the window to the next row:")
+        appendLine("pedals/steer/rpm are window MEANS (sequential-shift throttle cuts show as")
+        appendLine("briefly reduced throttle, not 0), lat_g/long_g are the window's signed peaks;")
+        appendLine("speed and gear are at row start.")
     }
 
     fun fmtLap(s: Double): String = if (s <= 0) "—" else {

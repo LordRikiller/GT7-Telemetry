@@ -35,6 +35,7 @@ class SettingsRepository(private val context: Context) {
         val ENGINEER_KEY = stringPreferencesKey("engineer_api_key")
         val ENGINEER_MODEL = stringPreferencesKey("engineer_model")
         val SETUP_NOTES = stringPreferencesKey("setup_notes")
+        val TYRES = stringPreferencesKey("tyres_fitted")
     }
 
     /** The console's LAN IP — where heartbeats go. Blank until the user sets it. */
@@ -70,6 +71,9 @@ class SettingsRepository(private val context: Context) {
     /** Free-text description of the car's current tune (GT7 doesn't broadcast it). */
     val setupNotes: Flow<String> = context.dataStore.data.map { it[Keys.SETUP_NOTES] ?: "" }
 
+    /** Tyre compound fitted, driver-declared (GT7 doesn't broadcast it); stamped onto laps. */
+    val tyres: Flow<String> = context.dataStore.data.map { it[Keys.TYRES] ?: "" }
+
     suspend fun setPs5Ip(ip: String) = context.dataStore.edit { it[Keys.PS5_IP] = ip.trim() }
     suspend fun setDashMode(mode: DashMode) = context.dataStore.edit { it[Keys.MODE] = mode.name }
     suspend fun setManualLayout(layout: String) = context.dataStore.edit { it[Keys.LAYOUT] = layout }
@@ -81,4 +85,5 @@ class SettingsRepository(private val context: Context) {
     suspend fun setEngineerApiKey(k: String) = context.dataStore.edit { it[Keys.ENGINEER_KEY] = k.trim() }
     suspend fun setEngineerModel(m: String) = context.dataStore.edit { it[Keys.ENGINEER_MODEL] = m.trim() }
     suspend fun setSetupNotes(n: String) = context.dataStore.edit { it[Keys.SETUP_NOTES] = n }
+    suspend fun setTyres(t: String) = context.dataStore.edit { it[Keys.TYRES] = t }
 }

@@ -1,6 +1,7 @@
 package com.gt7telemetry.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -148,6 +149,27 @@ fun SetupScreen(
                 Spacer(Modifier.height(10.dp))
             }
 
+            // ---- Tyres fitted (declared — GT7 doesn't broadcast compound) --
+            val tyres by viewModel.tyres.collectAsStateWithLifecycle()
+            SetupCard("TYRES FITTED — TAP TO DECLARE") {
+                Text(
+                    "GT7 doesn't broadcast the compound (or wear). Declare it here and every " +
+                        "recorded lap, CSV export and AI briefing carries it.",
+                    color = Palette.InkMute, fontSize = 11.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                val compounds = listOf(
+                    "Comfort Hard", "Comfort Medium", "Comfort Soft",
+                    "Sports Hard", "Sports Medium", "Sports Soft",
+                    "Racing Hard", "Racing Medium", "Racing Soft",
+                    "Intermediate", "Heavy Wet", "Dirt",
+                )
+                FlowChips(options = compounds, selected = tyres) { pick ->
+                    viewModel.setTyres(if (pick == tyres) "" else pick)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+
             // ---- What GT7 never sends + the described setup ----------------
             SetupCard("NOT BROADCAST BY GT7 — DESCRIBE IT ONCE") {
                 Text(
@@ -170,6 +192,33 @@ fun SetupScreen(
                 }
             }
             Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+/** Simple wrapping chip row (Compose foundation has no FlowRow until later versions). */
+@Composable
+private fun FlowChips(options: List<String>, selected: String, onPick: (String) -> Unit) {
+    // Three per row keeps labels readable on phones and tablets alike.
+    options.chunked(3).forEach { rowItems ->
+        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+            rowItems.forEach { label ->
+                val isSel = label == selected
+                Row(
+                    Modifier.weight(1f).padding(horizontal = 2.dp)
+                        .background(
+                            if (isSel) Palette.Amber.copy(alpha = 0.18f) else Palette.Carbon2,
+                            androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                        )
+                        .clickable { onPick(label) }
+                        .padding(vertical = 7.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Text(label, color = if (isSel) Palette.Amber else Palette.Ink, fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+            }
+            repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
         }
     }
 }
