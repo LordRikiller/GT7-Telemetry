@@ -9,6 +9,7 @@ import com.gt7telemetry.dash.DashLayout
 import com.gt7telemetry.engineer.Briefing
 import com.gt7telemetry.engineer.EngineerClient
 import com.gt7telemetry.logger.LapRecorder
+import com.gt7telemetry.logger.LapStore
 import com.gt7telemetry.logger.RecordedLap
 import com.gt7telemetry.settings.DashMode
 import com.gt7telemetry.settings.EngineerProvider
@@ -79,6 +80,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         settings.engineerModel.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val setupNotes: StateFlow<String> =
         settings.setupNotes.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+    val tyres: StateFlow<String> =
+        settings.tyres.stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     sealed interface EngineerState {
         data object Idle : EngineerState
@@ -125,6 +128,29 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun resetEngineer() { _engineerState.value = EngineerState.Idle }
     fun clearLaps() = LapRecorder.clear()
+    fun setTyres(t: String) = viewModelScope.launch { settings.setTyres(t) }
+
+    // ---- Lap history (on-disk) --------------------------------------------
+
+    val lapHistory: StateFlow<List<LapStore.StoredLapMeta>> = LapStore.entries
+
+    /** Load a stored lap's full trace off the main thread, then hand it to the UI. */
+    fun loadStoredLap(meta: LapStore.StoredLapMeta, onLoaded: (RecordedLap?) -> Unit) {
+        viewModelScope.launch {
+            val lap = withContext(Dispatchers.IO) { LapStore.load(meta) }
+            onLoaded(lap)
+        }
+    }
+
+    fun deleteStoredLap(meta: LapStore.StoredLapMeta) = LapStore.delete(meta)
+
+    /** Full-rate CSV export of a lap via the share sheet. */
+    fun exportCsv(lap: RecordedLap) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val car = CarCatalog.lookup(lap.carOrdinal)?.name
+            runCatching { com.gt7telemetry.logger.LapCsv.share(getApplication(), lap, car) }
+        }
+    }
 
     fun setEngineerProvider(p: EngineerProvider) = viewModelScope.launch { settings.setEngineerProvider(p) }
     fun setEngineerApiKey(k: String) = viewModelScope.launch { settings.setEngineerApiKey(k) }

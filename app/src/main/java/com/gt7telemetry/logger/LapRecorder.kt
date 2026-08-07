@@ -21,6 +21,10 @@ class RecordedLap(
     val carOrdinal: Int,
     /** Official lap time in seconds (from GT7's last-lap field); 0 = invalid lap. */
     val lapTimeS: Double,
+    /** Wall-clock time the lap finished recording (epoch ms); 0 = unknown. */
+    val recordedAtMs: Long = 0L,
+    /** Tyre compound as declared by the driver (GT7 doesn't broadcast it); "" = not set. */
+    val tyres: String = "",
     val sampleCount: Int,
     /** Seconds since lap start. */
     val t: FloatArray,
@@ -38,6 +42,11 @@ class RecordedLap(
     /** Longitudinal acceleration in g (Δspeed), + = accel, − = braking. */
     val longG: FloatArray,
     val clutchPct: FloatArray,
+    /** Tyre surface temperature per corner, °C. Empty arrays on laps stored before v0.7. */
+    val tyreFL: FloatArray = FloatArray(0),
+    val tyreFR: FloatArray = FloatArray(0),
+    val tyreRL: FloatArray = FloatArray(0),
+    val tyreRR: FloatArray = FloatArray(0),
 ) {
     val maxSpeedKmh: Double by lazy { (0 until sampleCount).maxOfOrNull { speedKmh[it].toDouble() } ?: 0.0 }
     val minSpeedKmh: Double by lazy { (0 until sampleCount).minOfOrNull { speedKmh[it].toDouble() } ?: 0.0 }
@@ -53,6 +62,18 @@ class RecordedLap(
     val maxLatG: Double by lazy { (0 until sampleCount).maxOfOrNull { abs(latG[it]).toDouble() } ?: 0.0 }
     val maxBrakingG: Double by lazy { (0 until sampleCount).maxOfOrNull { (-longG[it]).toDouble() } ?: 0.0 }
     val hasSteering: Boolean by lazy { (0 until sampleCount).any { !steerDeg[it].isNaN() } }
+    val hasTyreTemps: Boolean get() = tyreFL.size == sampleCount && sampleCount > 0
+
+    /** Mean front / rear tyre temperature over the lap, °C (null without temps). */
+    val avgTyreTempF: Double? by lazy { avgOf(tyreFL, tyreFR) }
+    val avgTyreTempR: Double? by lazy { avgOf(tyreRL, tyreRR) }
+
+    private fun avgOf(a: FloatArray, b: FloatArray): Double? {
+        if (a.size != sampleCount || b.size != sampleCount || sampleCount == 0) return null
+        var sum = 0.0
+        for (i in 0 until sampleCount) sum += (a[i] + b[i]) / 2.0
+        return sum / sampleCount
+    }
 
     private inline fun pctWhere(pred: (Int) -> Boolean): Double {
         if (sampleCount == 0) return 0.0
@@ -100,6 +121,12 @@ object LapRecorder {
     /** Lap number currently being recorded (0 = idle); drives the REC pill. */
     private val _recordingLap = MutableStateFlow(0)
     val recordingLap: StateFlow<Int> = _recordingLap.asStateFlow()
+
+    /** Driver-declared tyre compound, stamped onto each completed lap (set from settings). */
+    @Volatile var currentTyres: String = ""
+
+    /** Invoked with every completed lap — the persistence hook (set by the service). */
+    @Volatile var onLapCompleted: ((RecordedLap) -> Unit)? = null
 
     private var builder: Builder? = null
     private var prevT = -1.0
@@ -175,6 +202,7 @@ object LapRecorder {
     }
 
     private fun publish(lap: RecordedLap) {
+        onLapCompleted?.let { runCatching { it(lap) } } // persistence must never kill the receive loop
         val all = _laps.value + lap
         _laps.value = if (all.size <= MAX_LAPS) all else {
             val best = all.filter { it.lapTimeS > 0 }.minByOrNull { it.lapTimeS }
@@ -199,6 +227,10 @@ object LapRecorder {
         private var lat = FloatArray(cap)
         private var lon = FloatArray(cap)
         private var clu = FloatArray(cap)
+        private var tFL = FloatArray(cap)
+        private var tFR = FloatArray(cap)
+        private var tRL = FloatArray(cap)
+        private var tRR = FloatArray(cap)
 
         fun add(f: Frame, ts: Double, latG: Double, longG: Double) {
             if (size == cap) grow()
@@ -214,6 +246,10 @@ object LapRecorder {
             lat[size] = latG.toFloat()
             lon[size] = longG.toFloat()
             clu[size] = f.clutchPct.toFloat()
+            tFL[size] = f.tyreTempC[0].toFloat()
+            tFR[size] = f.tyreTempC[1].toFloat()
+            tRL[size] = f.tyreTempC[2].toFloat()
+            tRR[size] = f.tyreTempC[3].toFloat()
             size++
         }
 
@@ -223,12 +259,15 @@ object LapRecorder {
             brk = brk.copyOf(cap); steer = steer.copyOf(cap); rpm = rpm.copyOf(cap)
             gear = gear.copyOf(cap); px = px.copyOf(cap); pz = pz.copyOf(cap)
             lat = lat.copyOf(cap); lon = lon.copyOf(cap); clu = clu.copyOf(cap)
+            tFL = tFL.copyOf(cap); tFR = tFR.copyOf(cap); tRL = tRL.copyOf(cap); tRR = tRR.copyOf(cap)
         }
 
         fun build(lapTimeS: Double) = RecordedLap(
             lapNumber = lapNumber,
             carOrdinal = carOrdinal,
             lapTimeS = lapTimeS,
+            recordedAtMs = System.currentTimeMillis(),
+            tyres = LapRecorder.currentTyres,
             sampleCount = size,
             t = t.copyOf(size),
             speedKmh = speed.copyOf(size),
@@ -242,6 +281,10 @@ object LapRecorder {
             latG = lat.copyOf(size),
             longG = lon.copyOf(size),
             clutchPct = clu.copyOf(size),
+            tyreFL = tFL.copyOf(size),
+            tyreFR = tFR.copyOf(size),
+            tyreRL = tRL.copyOf(size),
+            tyreRR = tRR.copyOf(size),
         )
     }
 }

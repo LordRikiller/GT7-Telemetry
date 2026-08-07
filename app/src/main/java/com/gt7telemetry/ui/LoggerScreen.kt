@@ -45,8 +45,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gt7telemetry.TelemetryRepository
+import com.gt7telemetry.car.CarCatalog
 import com.gt7telemetry.logger.LapRecorder
+import com.gt7telemetry.logger.LapStore
 import com.gt7telemetry.logger.RecordedLap
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -72,10 +77,14 @@ fun LoggerScreen(
     val laps by LapRecorder.laps.collectAsStateWithLifecycle()
     val recordingLap by LapRecorder.recordingLap.collectAsStateWithLifecycle()
     val status by TelemetryRepository.status.collectAsStateWithLifecycle()
+    val history by viewModel.lapHistory.collectAsStateWithLifecycle()
 
     var selected by remember { mutableStateOf<RecordedLap?>(null) }
-    val shown = selected ?: laps.lastOrNull()
-    val best = laps.filter { it.lapTimeS > 0 }.minByOrNull { it.lapTimeS }
+    var historyMode by remember { mutableStateOf(false) }
+    var historyLap by remember { mutableStateOf<RecordedLap?>(null) }
+    val sessionShown = selected ?: laps.lastOrNull()
+    val shown = if (historyMode) historyLap else sessionShown
+    val best = if (historyMode) null else laps.filter { it.lapTimeS > 0 }.minByOrNull { it.lapTimeS }
 
     Column(
         Modifier.fillMaxSize().background(Palette.Asphalt).systemBarsPadding().padding(12.dp)
@@ -98,7 +107,14 @@ fun LoggerScreen(
                 }
             }
             Spacer(Modifier.weight(1f))
-            if (laps.isNotEmpty()) {
+            Pill(if (historyMode) "‹ SESSION" else "HISTORY (${history.size})",
+                onClick = { historyMode = !historyMode })
+            Spacer(Modifier.width(6.dp))
+            if (shown != null) {
+                Pill("CSV", onClick = { viewModel.exportCsv(shown) })
+                Spacer(Modifier.width(6.dp))
+            }
+            if (!historyMode && laps.isNotEmpty()) {
                 Pill("CLEAR", onClick = { selected = null; viewModel.clearLaps() })
                 Spacer(Modifier.width(6.dp))
             }
@@ -128,7 +144,40 @@ fun LoggerScreen(
         Spacer(Modifier.height(10.dp))
 
         // ---- Laps + analysis ---------------------------------------------
-        if (laps.isEmpty()) {
+        if (historyMode) {
+            if (history.isEmpty()) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("No stored laps yet", color = Palette.Ink, fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Every completed lap is saved to the phone automatically — the last " +
+                                "200 laps stay here across app restarts and play sessions.",
+                            color = Palette.InkDim, fontSize = 13.sp,
+                        )
+                    }
+                }
+            } else {
+                BoxWithConstraints(Modifier.weight(1f)) {
+                    val landscape = maxWidth > maxHeight
+                    val onPick: (com.gt7telemetry.logger.LapStore.StoredLapMeta) -> Unit = { meta ->
+                        viewModel.loadStoredLap(meta) { historyLap = it }
+                    }
+                    if (landscape) Row(Modifier.fillMaxSize()) {
+                        HistoryList(history, historyLap, viewModel,
+                            Modifier.width(300.dp).fillMaxHeight(), onPick)
+                        Spacer(Modifier.width(10.dp))
+                        historyLap?.let { LapDetail(it, null, landscape = true, Modifier.weight(1f)) }
+                    } else Column(Modifier.fillMaxSize()) {
+                        HistoryList(history, historyLap, viewModel,
+                            Modifier.fillMaxWidth().height(170.dp), onPick)
+                        Spacer(Modifier.height(10.dp))
+                        historyLap?.let { LapDetail(it, null, landscape = false, Modifier.weight(1f)) }
+                    }
+                }
+            }
+        } else if (laps.isEmpty()) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text("No laps recorded yet", color = Palette.Ink, fontSize = 15.sp,
@@ -263,6 +312,60 @@ private fun LapList(
                         Text("BEST", color = Palette.Amber, fontSize = 9.sp, fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp)
                     }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Lap history (on-disk, survives restarts)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun HistoryList(
+    entries: List<LapStore.StoredLapMeta>,
+    shown: RecordedLap?,
+    viewModel: DashboardViewModel,
+    modifier: Modifier,
+    onSelect: (LapStore.StoredLapMeta) -> Unit,
+) {
+    val dateFmt = remember { SimpleDateFormat("d MMM · HH:mm", Locale.getDefault()) }
+    Card(modifier) {
+        LazyColumn(Modifier.padding(6.dp)) {
+            items(entries, key = { it.file.name }) { meta ->
+                val isShown = shown != null && shown.recordedAtMs == meta.recordedAtMs &&
+                    shown.lapNumber == meta.lapNumber
+                val carName = CarCatalog.lookup(meta.carOrdinal)?.name
+                    ?: meta.carOrdinal.takeIf { it != 0 }?.let { "Car #$it" } ?: "—"
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        .background(if (isShown) Palette.Carbon2 else Color.Transparent)
+                        .clickable { onSelect(meta) }
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(Fmt.lap(meta.lapTimeS), color = Palette.Paint, fontSize = 13.sp,
+                                fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.width(8.dp))
+                            Text("L${meta.lapNumber}", color = Palette.InkDim, fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold)
+                            if (meta.tyres.isNotBlank()) {
+                                Spacer(Modifier.width(8.dp))
+                                Text(meta.tyres, color = Palette.Amber, fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Text("${dateFmt.format(Date(meta.recordedAtMs))} · $carName",
+                            color = Palette.InkMute, fontSize = 10.sp)
+                    }
+                    Text("${Fmt.n0(meta.maxSpeedKmh)} km/h", color = Palette.InkMute, fontSize = 11.sp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("✕", color = Palette.InkMute, fontSize = 12.sp,
+                        modifier = Modifier.clip(RoundedCornerShape(4.dp))
+                            .clickable { viewModel.deleteStoredLap(meta) }.padding(4.dp))
                 }
             }
         }

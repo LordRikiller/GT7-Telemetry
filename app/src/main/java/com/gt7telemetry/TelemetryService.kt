@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import com.gt7telemetry.car.SetupProbe
 import com.gt7telemetry.logger.LapRecorder
+import com.gt7telemetry.logger.LapStore
 import com.gt7telemetry.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +78,11 @@ class TelemetryService : Service() {
         val settings = SettingsRepository(this@TelemetryService)
         scope.launch { settings.ps5Ip.collect { ps5Ip = it.trim() } }
         scope.launch { settings.legacyPacket.collect { legacyPacket = it } }
+        // Declared tyre compound is stamped onto every recorded lap.
+        scope.launch { settings.tyres.collect { LapRecorder.currentTyres = it } }
+        // Persist completed laps to the on-disk history.
+        LapStore.init(this)
+        LapRecorder.onLapCompleted = LapStore::save
 
         worker = thread(name = "gt7-udp", isDaemon = true) {
             val buf = ByteArray(2048)

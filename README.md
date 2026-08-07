@@ -70,7 +70,11 @@ layout so it never drifts from the code.
 
 **The LOG button — a proper data logger.** Every full lap is recorded
 automatically at 60 Hz: throttle, brake, steering angle, speed, gear, RPM,
-racing line and lateral/longitudinal G. The screen shows live scrolling
+tyre temperatures, racing line and lateral/longitudinal G. Completed laps
+are also **saved to the phone** — the HISTORY view keeps the last 200 laps
+across app restarts and play sessions, each stamped with the car, date and
+declared tyre compound, and any lap (live or stored) exports as a
+**full-rate CSV** via the share sheet. The screen shows live scrolling
 input traces (throttle green, brake red, steering white — the classic
 logger convention), the session's lap list with per-lap stats (full-throttle
 / braking / coasting shares, max G, delta to best), and for any lap a track
