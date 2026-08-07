@@ -26,6 +26,7 @@ import com.gt7telemetry.ui.Gt7Theme
 import com.gt7telemetry.ui.LoggerScreen
 import com.gt7telemetry.ui.SettingsScreen
 import com.gt7telemetry.ui.SetupScreen
+import com.gt7telemetry.ui.SheetEditorScreen
 import com.gt7telemetry.update.UpdateInstaller
 import com.gt7telemetry.update.UpdateState
 
@@ -62,7 +63,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { DASHBOARD, SETTINGS, LOGGER, ENGINEER, SETUP }
+private enum class Screen { DASHBOARD, SETTINGS, LOGGER, ENGINEER, SETUP, SHEET }
 
 @Composable
 private fun AppRoot(viewModel: DashboardViewModel) {
@@ -103,6 +104,11 @@ private fun AppRoot(viewModel: DashboardViewModel) {
             viewModel = viewModel,
             onBack = { screen = Screen.DASHBOARD },
             onOpenEngineer = { screen = Screen.ENGINEER },
+            onOpenSheet = { screen = Screen.SHEET },
+        )
+        Screen.SHEET -> SheetEditorScreen(
+            viewModel = viewModel,
+            onBack = { screen = Screen.SETUP },
         )
     }
 }

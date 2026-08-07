@@ -14,6 +14,8 @@ import com.gt7telemetry.logger.RecordedLap
 import com.gt7telemetry.settings.DashMode
 import com.gt7telemetry.settings.EngineerProvider
 import com.gt7telemetry.settings.SettingsRepository
+import com.gt7telemetry.setup.SetupSheet
+import com.gt7telemetry.setup.SetupSheetStore
 import com.gt7telemetry.update.UpdateChecker
 import com.gt7telemetry.update.UpdateState
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +59,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
     init {
+        // Per-car setup sheets live on disk; a handful of small JSON files.
+        SetupSheetStore.init(application)
         // Load the bundled ~575-car catalog off the main thread, then refresh
         // it from the live community DB so cars added in a game patch resolve
         // (and the auto dashboard picker works for them) without an app update.
@@ -99,7 +103,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val car = CarCatalog.lookup(ordinal)?.name ?: ordinal?.takeIf { it != 0 }?.let { "GT7 car #$it" }
         // Only attach measured setup that belongs to the recorded car.
         val measured = SetupProbe.setup.value?.takeIf { ordinal == null || it.carOrdinal == ordinal }
-        return Briefing.build(laps, car, setupNotes.value, measured)
+        // The recorded car's saved setup sheet is pulled up automatically.
+        val sheet = SetupSheetStore.forCar(ordinal)?.takeIf { it.hasAnyValues }
+        return Briefing.build(laps, car, setupNotes.value, measured, sheet)
     }
 
     /**
@@ -129,6 +135,21 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun resetEngineer() { _engineerState.value = EngineerState.Idle }
     fun clearLaps() = LapRecorder.clear()
     fun setTyres(t: String) = viewModelScope.launch { settings.setTyres(t) }
+
+    // ---- Setup sheets (per-car, GT7 settings-sheet replica) ----------------
+
+    val setupSheets: StateFlow<Map<Int, SetupSheet>> = SetupSheetStore.sheets
+
+    /** The car the sheet editor should open on (set before navigating). */
+    @Volatile var editorCarOrdinal: Int? = null
+
+    fun saveSetupSheet(sheet: SetupSheet) {
+        val named = if (sheet.carName.isBlank())
+            sheet.copy(carName = CarCatalog.lookup(sheet.carOrdinal)?.name ?: "") else sheet
+        SetupSheetStore.save(named)
+    }
+
+    fun deleteSetupSheet(ordinal: Int) = SetupSheetStore.delete(ordinal)
 
     // ---- Lap history (on-disk) --------------------------------------------
 

@@ -15,8 +15,8 @@ android {
         targetSdk = 34
         // Version is baked in for local builds and overridden from a pushed
         // semver tag by the release workflow (VERSION_CODE / VERSION_NAME).
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 700
-        versionName = System.getenv("VERSION_NAME") ?: "0.7.0"
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 800
+        versionName = System.getenv("VERSION_NAME") ?: "0.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

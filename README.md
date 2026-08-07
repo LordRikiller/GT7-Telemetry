@@ -83,6 +83,18 @@ out — above the full lap traces. Steering needs GT7 ≥ 1.42 (the app asks
 the console for the extended telemetry packet and falls back automatically
 on older firmware).
 
+**The setup sheet — a full GT7 settings replica, per car.** Since the game
+won't export setups, the app replicates the settings sheet: pick the car
+(or use the one you're driving), declare which parts are fitted, and only
+the settings those parts unlock appear — the same gating as the tuning
+shop (a fully customisable suspension unlocks ride height, frequency,
+dampers, ARB, camber and toe; a customisable gearbox unlocks per-gear
+ratios and final drive, which can be **prefilled from live telemetry**;
+and so on through diff, aero, ECU, ballast, brake balance). Sheets are
+saved per car, pulled up automatically when the game hands the app that
+car, and attached in full to every AI briefing — the engineer sees your
+exact numbers instead of a prose description.
+
 **The TUNE button — the car's setup, as far as it can be known.** GT7
 never transmits the settings sheet itself, but the stream reveals more
 than you'd think, and the app collects all of it per car: the **fitted
