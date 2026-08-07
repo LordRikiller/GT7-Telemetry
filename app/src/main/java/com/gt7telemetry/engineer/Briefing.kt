@@ -2,6 +2,7 @@ package com.gt7telemetry.engineer
 
 import com.gt7telemetry.car.MeasuredSetup
 import com.gt7telemetry.logger.RecordedLap
+import com.gt7telemetry.setup.SetupSheet
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
@@ -23,6 +24,7 @@ object Briefing {
         carName: String?,
         setupNotes: String,
         measured: MeasuredSetup? = null,
+        sheet: SetupSheet? = null,
     ): String = buildString {
         val best = laps.filter { it.lapTimeS > 0 }.minByOrNull { it.lapTimeS } ?: laps.lastOrNull()
 
@@ -43,11 +45,17 @@ object Briefing {
         appendLine("  (GT7 broadcasts neither the tyre compound nor tyre wear — compound is the")
         appendLine("  driver's declaration; tyre temperatures below are measured.)")
         appendLine()
-        appendLine("## Current setup (as described by the driver)")
-        if (setupNotes.isBlank()) {
-            appendLine("Not provided — assume the stock setup unless the data suggests otherwise.")
+        if (sheet != null) {
+            appendLine("## Setup sheet (driver-declared, structured)")
+            append(sheet.toBriefingText())
+            if (setupNotes.isNotBlank()) appendLine("Additional notes: ${setupNotes.trim()}")
         } else {
-            appendLine(setupNotes.trim())
+            appendLine("## Current setup (as described by the driver)")
+            if (setupNotes.isBlank()) {
+                appendLine("Not provided — assume the stock setup unless the data suggests otherwise.")
+            } else {
+                appendLine(setupNotes.trim())
+            }
         }
         appendLine()
         appendLine("(GT7's telemetry stream does not broadcast most settings-sheet values, so the")

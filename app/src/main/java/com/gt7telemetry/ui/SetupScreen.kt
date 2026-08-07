@@ -48,6 +48,7 @@ fun SetupScreen(
     viewModel: DashboardViewModel,
     onBack: () -> Unit,
     onOpenEngineer: () -> Unit,
+    onOpenSheet: () -> Unit,
 ) {
     val setup by SetupProbe.setup.collectAsStateWithLifecycle()
     val frame by TelemetryRepository.frame.collectAsStateWithLifecycle()
@@ -148,6 +149,43 @@ fun SetupScreen(
                 }
                 Spacer(Modifier.height(10.dp))
             }
+
+            // ---- The per-car setup sheet (GT7 settings-sheet replica) ------
+            run {
+                val sheets by viewModel.setupSheets.collectAsStateWithLifecycle()
+                val sheetOrdinal = ordinal?.takeIf { it != 0 }
+                val sheet = sheetOrdinal?.let { sheets[it] }
+                SetupCard("SETUP SHEET — FULL GT7 SETTINGS REPLICA") {
+                    if (sheet != null && sheet.hasAnyValues) {
+                        Text(
+                            "${sheet.carName.ifBlank { "Car #${sheet.carOrdinal}" }} — sheet saved. " +
+                                "It's attached to every AI briefing for this car automatically.",
+                            color = Palette.Ink, fontSize = 12.sp,
+                        )
+                    } else {
+                        Text(
+                            "Declare the car's parts and every unlocked setting exactly like the " +
+                                "in-game sheet — parts decide which settings appear. Saved per car " +
+                                "and pulled up automatically when you drive it.",
+                            color = Palette.InkMute, fontSize = 11.sp,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        Pill(if (sheet != null) "EDIT SHEET" else "CREATE SHEET", accent = true) {
+                            viewModel.editorCarOrdinal = sheetOrdinal
+                            onOpenSheet()
+                        }
+                        if (sheets.isNotEmpty()) {
+                            Spacer(Modifier.width(8.dp))
+                            Text("${sheets.size} car${if (sheets.size == 1) "" else "s"} on file",
+                                color = Palette.InkMute, fontSize = 11.sp,
+                                modifier = Modifier.align(Alignment.CenterVertically))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
 
             // ---- Tyres fitted (declared — GT7 doesn't broadcast compound) --
             val tyres by viewModel.tyres.collectAsStateWithLifecycle()

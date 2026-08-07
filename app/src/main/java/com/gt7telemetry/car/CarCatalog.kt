@@ -147,4 +147,16 @@ object CarCatalog {
     }
 
     fun manufacturer(ordinal: Int?): String? = lookup(ordinal)?.manufacturer
+
+    /** Case-insensitive substring search over the whole catalog (for the car picker). */
+    fun search(query: String, limit: Int = 40): List<Pair<Int, CarInfo>> {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) return emptyList()
+        return byOrdinal.entries.asSequence()
+            .mapNotNull { (ord, _) -> lookup(ord)?.let { ord to it } }
+            .filter { (_, info) -> info.name.lowercase().contains(q) }
+            .sortedBy { (_, info) -> info.name }
+            .take(limit)
+            .toList()
+    }
 }
