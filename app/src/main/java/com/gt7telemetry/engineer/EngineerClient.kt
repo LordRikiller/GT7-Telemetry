@@ -28,8 +28,12 @@ import java.net.URL
  */
 object EngineerClient {
 
-    private const val MAX_OUTPUT_TOKENS = 1500
-    private const val TIMEOUT_MS = 90_000
+    // Claude 5-family models think by default, and max_tokens caps
+    // thinking + visible text TOGETHER — a tight cap gets eaten by the
+    // thinking and yields an empty report. 4096 leaves room for both while
+    // still bounding a single analysis to a few cents.
+    private const val MAX_OUTPUT_TOKENS = 4096
+    private const val TIMEOUT_MS = 120_000
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -68,9 +72,21 @@ object EngineerClient {
         root["error"]?.let { err ->
             error(err.jsonObject["message"]?.jsonPrimitive?.content ?: "Anthropic API error")
         }
-        return root["content"]!!.jsonArray
+        // Only text blocks are the report — thinking blocks carry no text.
+        val text = root["content"]!!.jsonArray
+            .filter { it.jsonObject["type"]?.jsonPrimitive?.content == "text" }
             .mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.content }
             .joinToString("\n")
+            .trim()
+        if (text.isBlank()) {
+            val stop = root["stop_reason"]?.jsonPrimitive?.content
+            error(when (stop) {
+                "max_tokens" -> "The model used its whole token budget thinking and produced no report — press Analyse again."
+                "refusal" -> "The model declined this request."
+                else -> "The model returned an empty report (stop_reason: ${stop ?: "unknown"})."
+            })
+        }
+        return text
     }
 
     private fun askGemini(apiKey: String, model: String, briefing: String): String {
@@ -92,10 +108,21 @@ object EngineerClient {
         root["error"]?.let { err ->
             error(err.jsonObject["message"]?.jsonPrimitive?.content ?: "Gemini API error")
         }
-        return root["candidates"]!!.jsonArray.first().jsonObject["content"]!!
-            .jsonObject["parts"]!!.jsonArray
-            .mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.content }
-            .joinToString("\n")
+        val candidate = root["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
+            ?: error("Gemini returned no candidates.")
+        val text = candidate["content"]?.jsonObject?.get("parts")?.jsonArray
+            ?.mapNotNull { it.jsonObject["text"]?.jsonPrimitive?.content }
+            ?.joinToString("\n")
+            ?.trim()
+            .orEmpty()
+        if (text.isBlank()) {
+            val finish = candidate["finishReason"]?.jsonPrimitive?.content
+            error(when (finish) {
+                "MAX_TOKENS" -> "The model used its whole token budget thinking and produced no report — press Analyse again."
+                else -> "The model returned an empty report (finishReason: ${finish ?: "unknown"})."
+            })
+        }
+        return text
     }
 
     private fun post(url: String, body: String, headers: Map<String, String>): String {
