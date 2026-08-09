@@ -16,6 +16,7 @@ import com.gt7telemetry.settings.EngineerProvider
 import com.gt7telemetry.settings.SettingsRepository
 import com.gt7telemetry.setup.SetupSheet
 import com.gt7telemetry.setup.SetupSheetStore
+import com.gt7telemetry.track.TrackStore
 import com.gt7telemetry.update.UpdateChecker
 import com.gt7telemetry.update.UpdateState
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +62,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         // Per-car setup sheets live on disk; a handful of small JSON files.
         SetupSheetStore.init(application)
+        // Learned track fingerprints (name it once, recognised forever).
+        TrackStore.init(application)
         // Load the bundled ~575-car catalog off the main thread, then refresh
         // it from the live community DB so cars added in a game patch resolve
         // (and the auto dashboard picker works for them) without an app update.
@@ -142,8 +145,18 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         val measured = SetupProbe.setup.value?.takeIf { ordinal == null || it.carOrdinal == ordinal }
         // The recorded car's saved setup sheet is pulled up automatically.
         val sheet = SetupSheetStore.forCar(ordinal)?.takeIf { it.hasAnyValues }
-        return Briefing.build(laps, car, setupNotes.value, measured, sheet)
+        val track = laps.lastOrNull()?.let { TrackStore.identify(it) }
+        return Briefing.build(laps, car, setupNotes.value, measured, sheet, track)
     }
+
+    /** Teach the app this lap's track name (recognised automatically after). */
+    fun nameTrack(name: String, lap: RecordedLap) {
+        TrackStore.learn(name, lap)
+        trackRevision.value++
+    }
+
+    /** Bumped when a track is named so open screens re-run identification. */
+    val trackRevision = MutableStateFlow(0)
 
     /**
      * The built-in engineer: exactly one bounded API request per press.

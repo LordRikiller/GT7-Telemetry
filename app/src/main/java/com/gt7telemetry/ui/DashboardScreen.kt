@@ -13,13 +13,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,7 +34,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +53,7 @@ fun DashboardScreen(
     onOpenLogger: () -> Unit,
     onOpenEngineer: () -> Unit,
     onOpenSetup: () -> Unit,
+    onOpenConnection: () -> Unit,
 ) {
     val frame by TelemetryRepository.frame.collectAsStateWithLifecycle()
     val status by TelemetryRepository.status.collectAsStateWithLifecycle()
@@ -92,7 +91,15 @@ fun DashboardScreen(
         Box(Modifier.weight(1f)) {
             val f = frame
             if (!status.everReceived || f == null) {
-                SetupCard(ps5Ip, theme, onSaveIp = viewModel::setPs5Ip)
+                HomeContent(
+                    viewModel = viewModel,
+                    ps5Ip = ps5Ip,
+                    status = status,
+                    onOpenLogger = onOpenLogger,
+                    onOpenEngineer = onOpenEngineer,
+                    onOpenSetup = onOpenSetup,
+                    onOpenConnection = onOpenConnection,
+                )
             } else {
                 // In menus/replays GT7 keeps streaming the LAST on-track
                 // values — without this the dash impersonates a live
@@ -231,58 +238,145 @@ private fun Toggle(label: String, theme: ClusterTheme, onClick: () -> Unit) {
     ) { Text(label, color = theme.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
 }
 
-@Composable
-private fun SetupCard(ps5Ip: String, theme: ClusterTheme, onSaveIp: (String) -> Unit) {
-    var draft by remember(ps5Ip) { mutableStateOf(ps5Ip) }
+// ---------------------------------------------------------------------------
+// Home — what greets you when no telemetry is flowing. Instead of a setup
+// form, it picks up where you left off: your last session, one tap from an
+// AI engineer debrief, with the connection tucked into a status strip.
+// ---------------------------------------------------------------------------
 
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(theme.panel)
-        .padding(16.dp)) {
-        Column {
-            Text("NO TELEMETRY YET — POINT THIS APP AT YOUR PS5", color = theme.mute, fontSize = 11.sp,
-                fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-            Spacer(Modifier.height(12.dp))
-            SetupRow("1.", "On the PS5: Settings → Network → Connection Status", theme)
-            SetupRow("2.", "Note the console's IPv4 address and enter it below", theme)
-            SetupRow("3.", "Start Gran Turismo 7 and drive", theme)
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    label = { Text("PS5 IP address") },
-                    placeholder = { Text("192.168.1.20") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                )
-                Spacer(Modifier.width(10.dp))
-                Button(onClick = { onSaveIp(draft) }, enabled = draft.isNotBlank()) { Text("Save") }
-            }
-            if (ps5Ip.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Requesting telemetry from ", color = theme.ink2, fontSize = 13.sp)
-                    Text(ps5Ip, color = theme.accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+@Composable
+private fun HomeContent(
+    viewModel: DashboardViewModel,
+    ps5Ip: String,
+    status: com.gt7telemetry.Status,
+    onOpenLogger: () -> Unit,
+    onOpenEngineer: () -> Unit,
+    onOpenSetup: () -> Unit,
+    onOpenConnection: () -> Unit,
+) {
+    val history by viewModel.lapHistory.collectAsStateWithLifecycle()
+    val catalogRevision by viewModel.catalogRevision.collectAsStateWithLifecycle()
+    val trackRevision by viewModel.trackRevision.collectAsStateWithLifecycle()
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        val newest = history.firstOrNull()
+        if (newest == null) {
+            // First run — nothing recorded yet.
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                .background(Palette.HeroBrush).padding(20.dp)) {
+                Column {
+                    Text("WELCOME TO THE PIT WALL", color = Palette.Blue, fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Point the app at your PS5 and drive", color = Palette.Paint,
+                        fontSize = 21.sp, fontWeight = FontWeight.Bold, lineHeight = 27.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Every lap you drive is recorded automatically — live instruments while " +
+                            "you race, full data-logger traces after, and an AI race engineer to " +
+                            "turn it all into setup changes.",
+                        color = Palette.Ink, fontSize = 13.sp, lineHeight = 19.sp,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    HomeCta("SET UP CONNECTION ›", accent = true, onClick = onOpenConnection)
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                "The PS5 and this phone must be on the same Wi-Fi. GT7 streams automatically — " +
-                    "there's nothing to enable in-game. This card disappears the moment the first packet lands.",
-                color = theme.ink2, fontSize = 13.sp
-            )
+        } else {
+            // The last session, ready to pick back up.
+            val session = history.filter {
+                it.carOrdinal == newest.carOrdinal &&
+                    kotlin.math.abs(it.recordedAtMs - newest.recordedAtMs) < 3 * 3600_000L
+            }
+            val bestMeta = session.filter { it.lapTimeS > 0 }.minByOrNull { it.lapTimeS }
+            val carName = (if (catalogRevision > 0) CarCatalog.lookup(newest.carOrdinal)?.name else null)
+                ?: newest.carOrdinal.takeIf { it != 0 }?.let { "Car #$it" } ?: "Unknown car"
+            var trackName by remember(newest.file.name) { mutableStateOf<String?>(null) }
+            LaunchedEffect(newest.file.name, trackRevision) {
+                viewModel.loadStoredLap(newest) { lap ->
+                    trackName = lap?.let { com.gt7telemetry.track.TrackStore.identify(it) }
+                }
+            }
+            val dateFmt = remember { java.text.SimpleDateFormat("EEE d MMM · HH:mm", java.util.Locale.getDefault()) }
+
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                .background(Palette.HeroBrush).padding(20.dp)) {
+                Column {
+                    Text("LAST SESSION", color = Palette.Blue, fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(carName, color = Palette.Paint, fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold, lineHeight = 26.sp)
+                    Text(
+                        listOfNotNull(
+                            trackName,
+                            dateFmt.format(java.util.Date(newest.recordedAtMs)),
+                            newest.tyres.takeIf { it.isNotBlank() },
+                        ).joinToString("  ·  "),
+                        color = Palette.InkDim, fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Row {
+                        HomeStat("LAPS", session.size.toString())
+                        Spacer(Modifier.width(22.dp))
+                        HomeStat("BEST", bestMeta?.let { Fmt.lap(it.lapTimeS) } ?: "—", Palette.Amber)
+                        Spacer(Modifier.width(22.dp))
+                        HomeStat("TOP", "${Fmt.n0(session.maxOf { it.maxSpeedKmh })} km/h")
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Row {
+                        HomeCta("AI RACE ENGINEER ›", accent = true) {
+                            viewModel.openEngineerWithStored(newest) { onOpenEngineer() }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        HomeCta("LAP HISTORY ›", onClick = onOpenLogger)
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Row {
+                Pill("TUNING / SETUP ›", onClick = onOpenSetup)
+            }
         }
+        Spacer(Modifier.height(10.dp))
+
+        // Connection status strip — the details live on their own page now.
+        Card(Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                val (txt, col) = when {
+                    status.live -> "Connected — receiving telemetry" to Palette.Good
+                    status.everReceived -> "Connection lost — is GT7 running?" to Palette.Hot
+                    ps5Ip.isBlank() -> "No PS5 configured yet" to Palette.InkMute
+                    else -> "Waiting for $ps5Ip — start GT7 and drive" to Palette.InkDim
+                }
+                Box(Modifier.width(8.dp).height(8.dp).clip(RoundedCornerShape(4.dp)).background(col))
+                Spacer(Modifier.width(10.dp))
+                Text(txt, color = Palette.InkDim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Pill("CONNECTION ›", onClick = onOpenConnection)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
     }
 }
 
 @Composable
-private fun SetupRow(num: String, text: String, theme: ClusterTheme, highlight: String? = null) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-        Text(num, color = theme.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
-        Text(text, color = theme.ink, fontSize = 14.sp)
-        if (highlight != null) {
-            Spacer(Modifier.width(6.dp))
-            Text(highlight, color = theme.accent, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-        }
+private fun HomeStat(label: String, value: String, color: Color = Palette.Paint) {
+    Column {
+        Text(value, color = color, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace)
+        Text(label, color = Palette.InkMute, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp)
+    }
+}
+
+@Composable
+private fun HomeCta(text: String, accent: Boolean = false, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(8.dp))
+            .background(if (accent) Palette.Amber else Palette.Carbon2)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Text(text, color = if (accent) Palette.AmberInk else Palette.Ink, fontSize = 12.sp,
+            fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp)
     }
 }

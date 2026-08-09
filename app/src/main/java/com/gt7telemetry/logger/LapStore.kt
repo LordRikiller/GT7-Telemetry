@@ -23,7 +23,8 @@ import java.util.concurrent.Executors
 object LapStore {
 
     private const val MAGIC = 0x47375350 // "G7SP"
-    private const val VERSION = 1
+    // v1: 16 channels. v2 (v0.10) appends posY (elevation) as a 17th channel.
+    private const val VERSION = 2
     private const val MAX_STORED = 200
 
     data class StoredLapMeta(
@@ -95,7 +96,8 @@ object LapStore {
     // ---- Wire format ------------------------------------------------------
     // header: magic, version, lapNumber, carOrdinal, lapTimeS, recordedAtMs,
     //         tyres (UTF), maxSpeed, sampleCount
-    // body:   16 channels × sampleCount floats, in a fixed order.
+    // body:   channels × sampleCount floats in a fixed order — 16 in v1,
+    //         17 in v2 (posY appended last so v1 files read unchanged).
 
     internal fun writeLap(file: File, lap: RecordedLap) {
         val tmp = File(file.parentFile, file.name + ".tmp")
@@ -121,7 +123,7 @@ object LapStore {
     internal fun readMeta(file: File): StoredLapMeta =
         DataInputStream(file.inputStream().buffered()).use { i ->
             require(i.readInt() == MAGIC) { "bad magic" }
-            require(i.readInt() == VERSION) { "bad version" }
+            require(i.readInt() in 1..VERSION) { "bad version" }
             val lapNumber = i.readInt()
             val carOrdinal = i.readInt()
             val lapTimeS = i.readDouble()
@@ -134,7 +136,8 @@ object LapStore {
     internal fun readLap(file: File): RecordedLap =
         DataInputStream(file.inputStream().buffered()).use { i ->
             require(i.readInt() == MAGIC) { "bad magic" }
-            require(i.readInt() == VERSION) { "bad version" }
+            val version = i.readInt()
+            require(version in 1..VERSION) { "bad version" }
             val lapNumber = i.readInt()
             val carOrdinal = i.readInt()
             val lapTimeS = i.readDouble()
@@ -151,12 +154,13 @@ object LapStore {
                 steerDeg = arr(), rpm = arr(), gear = arr(), posX = arr(), posZ = arr(),
                 latG = arr(), longG = arr(), clutchPct = arr(),
                 tyreFL = arr(), tyreFR = arr(), tyreRL = arr(), tyreRR = arr(),
+                posY = if (version >= 2) arr() else FloatArray(0),
             )
         }
 
     private fun channels(lap: RecordedLap): Array<FloatArray> = arrayOf(
         lap.t, lap.speedKmh, lap.throttlePct, lap.brakePct, lap.steerDeg, lap.rpm,
         lap.gear, lap.posX, lap.posZ, lap.latG, lap.longG, lap.clutchPct,
-        lap.tyreFL, lap.tyreFR, lap.tyreRL, lap.tyreRR,
+        lap.tyreFL, lap.tyreFR, lap.tyreRL, lap.tyreRR, lap.posY,
     )
 }

@@ -25,6 +25,7 @@ object Fmt {
 
     fun n0(v: Double): String = v.roundToInt().toString()
     fun n1(v: Double): String = "%.1f".format(v)
+    fun n2(v: Double): String = "%.2f".format(v)
 
     // Tyre temperature is shown as raw °C/°F only — matching the FH6 app's
     // no-verdict presentation (its working-window colouring was removed after

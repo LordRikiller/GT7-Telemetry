@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.gt7telemetry.ui.ConnectionScreen
 import com.gt7telemetry.ui.DashboardScreen
 import com.gt7telemetry.ui.DashboardViewModel
 import com.gt7telemetry.ui.EngineerScreen
@@ -63,7 +64,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { DASHBOARD, SETTINGS, LOGGER, ENGINEER, SETUP, SHEET }
+private enum class Screen { DASHBOARD, SETTINGS, CONNECTION, LOGGER, ENGINEER, SETUP, SHEET }
 
 @Composable
 private fun AppRoot(viewModel: DashboardViewModel) {
@@ -87,8 +88,14 @@ private fun AppRoot(viewModel: DashboardViewModel) {
             // session is only handed over from the logger's history view.
             onOpenEngineer = { viewModel.useLiveSession(); screen = Screen.ENGINEER },
             onOpenSetup = { screen = Screen.SETUP },
+            onOpenConnection = { screen = Screen.CONNECTION },
         )
         Screen.SETTINGS -> SettingsScreen(
+            viewModel = viewModel,
+            onBack = { screen = Screen.DASHBOARD },
+            onOpenConnection = { screen = Screen.CONNECTION },
+        )
+        Screen.CONNECTION -> ConnectionScreen(
             viewModel = viewModel,
             onBack = { screen = Screen.DASHBOARD },
         )

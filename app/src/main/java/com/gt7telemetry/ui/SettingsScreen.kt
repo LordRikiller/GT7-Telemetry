@@ -49,7 +49,7 @@ import com.gt7telemetry.update.UpdateInstaller
 import com.gt7telemetry.update.UpdateState
 
 @Composable
-fun SettingsScreen(viewModel: DashboardViewModel, onBack: () -> Unit) {
+fun SettingsScreen(viewModel: DashboardViewModel, onBack: () -> Unit, onOpenConnection: () -> Unit) {
     val ps5Ip by viewModel.ps5Ip.collectAsStateWithLifecycle()
     val dashMode by viewModel.dashMode.collectAsStateWithLifecycle()
     val manualLayout by viewModel.manualLayout.collectAsStateWithLifecycle()
@@ -71,40 +71,25 @@ fun SettingsScreen(viewModel: DashboardViewModel, onBack: () -> Unit) {
             Text("Settings", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
 
-        // ---- PlayStation ----
-        SectionLabel("PlayStation")
-        Text(
-            "The console's LAN IP address (PS5: Settings → Network → Connection Status). " +
-                "The app asks this address for GT7's telemetry stream on UDP ${TelemetryService.SEND_PORT}.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(bottom = 10.dp)
-        )
-        var ipDraft by remember(ps5Ip) { mutableStateOf(ps5Ip) }
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = ipDraft,
-                onValueChange = { ipDraft = it },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                label = { Text("PS5 IP address") },
-                placeholder = { Text("192.168.1.20") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            )
-            Spacer(Modifier.width(10.dp))
-            Button(onClick = { viewModel.setPs5Ip(ipDraft) }, enabled = ipDraft.trim() != ps5Ip) { Text("Save") }
+        // ---- Connection ----
+        SectionLabel("Connection")
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                .clickable(onClick = onOpenConnection).padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("PlayStation connection", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface)
+                Text(
+                    if (ps5Ip.isBlank()) "Not set up yet — tap to configure"
+                    else "PS5 at $ps5Ip · telemetry on UDP ${TelemetryService.SEND_PORT}",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text("›", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-
-        Spacer(Modifier.height(12.dp))
-        val legacyPacket by viewModel.legacyPacket.collectAsStateWithLifecycle()
-        ToggleRow(
-            "Legacy telemetry packet",
-            if (legacyPacket) "296-byte 'A' — no steering channel"
-            else "Extended '~' — steering + chassis G (GT7 ≥ 1.42)",
-            legacyPacket,
-        ) { viewModel.setLegacyPacket(it) }
-        Text(
-            "Leave this off. Only switch it on if a very old GT7 version refuses to stream at all.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
-        )
 
         SectionDivider()
 
