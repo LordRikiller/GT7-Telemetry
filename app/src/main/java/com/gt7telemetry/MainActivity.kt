@@ -83,7 +83,9 @@ private fun AppRoot(viewModel: DashboardViewModel) {
             viewModel = viewModel,
             onOpenSettings = { screen = Screen.SETTINGS },
             onOpenLogger = { screen = Screen.LOGGER },
-            onOpenEngineer = { screen = Screen.ENGINEER },
+            // From the dash the engineer analyses the live session — a stored
+            // session is only handed over from the logger's history view.
+            onOpenEngineer = { viewModel.useLiveSession(); screen = Screen.ENGINEER },
             onOpenSetup = { screen = Screen.SETUP },
         )
         Screen.SETTINGS -> SettingsScreen(
@@ -103,7 +105,7 @@ private fun AppRoot(viewModel: DashboardViewModel) {
         Screen.SETUP -> SetupScreen(
             viewModel = viewModel,
             onBack = { screen = Screen.DASHBOARD },
-            onOpenEngineer = { screen = Screen.ENGINEER },
+            onOpenEngineer = { viewModel.useLiveSession(); screen = Screen.ENGINEER },
             onOpenSheet = { screen = Screen.SHEET },
         )
         Screen.SHEET -> SheetEditorScreen(

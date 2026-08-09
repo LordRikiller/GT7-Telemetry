@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -82,43 +84,86 @@ fun LoggerScreen(
     var selected by remember { mutableStateOf<RecordedLap?>(null) }
     var historyMode by remember { mutableStateOf(false) }
     var historyLap by remember { mutableStateOf<RecordedLap?>(null) }
+    var historyMeta by remember { mutableStateOf<LapStore.StoredLapMeta?>(null) }
     val sessionShown = selected ?: laps.lastOrNull()
     val shown = if (historyMode) historyLap else sessionShown
     val best = if (historyMode) null else laps.filter { it.lapTimeS > 0 }.minByOrNull { it.lapTimeS }
+
+    // From history the engineer analyses the loaded lap's whole stored
+    // session; otherwise it gets the live session as before.
+    val openEngineer = {
+        val meta = historyMeta
+        if (historyMode && meta != null) {
+            viewModel.openEngineerWithStored(meta) { onOpenEngineer() }
+        } else {
+            viewModel.useLiveSession()
+            onOpenEngineer()
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().background(Palette.Asphalt).systemBarsPadding().padding(12.dp)
     ) {
         // ---- Top bar -----------------------------------------------------
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Pill("‹ DASH", onClick = onBack)
-            Spacer(Modifier.width(10.dp))
-            Text("DATA LOGGER", color = Palette.Paint, fontSize = 14.sp,
-                fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-            Spacer(Modifier.width(10.dp))
-            if (recordingLap > 0 && status.live) {
-                Box(
-                    Modifier.clip(RoundedCornerShape(6.dp))
-                        .background(Palette.Bad.copy(alpha = 0.18f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text("● REC LAP $recordingLap", color = Palette.Bad, fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        // Five pills plus a title never fit a portrait phone — below this
+        // width the actions collapse into one ☰ menu, same as the dashboard.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val compact = maxWidth < 640.dp
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Pill("‹ DASH", onClick = onBack)
+                Spacer(Modifier.width(10.dp))
+                Text("DATA LOGGER", color = Palette.Paint, fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Spacer(Modifier.width(10.dp))
+                if (recordingLap > 0 && status.live) {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(6.dp))
+                            .background(Palette.Bad.copy(alpha = 0.18f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text("● REC LAP $recordingLap", color = Palette.Bad, fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                if (compact) {
+                    var open by remember { mutableStateOf(false) }
+                    Box {
+                        Pill("☰") { open = true }
+                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                            DropdownMenuItem(
+                                text = { Text(if (historyMode) "Session laps" else "Lap history (${history.size})", fontSize = 14.sp) },
+                                onClick = { open = false; historyMode = !historyMode },
+                            )
+                            if (shown != null) DropdownMenuItem(
+                                text = { Text("Export CSV", fontSize = 14.sp) },
+                                onClick = { open = false; viewModel.exportCsv(shown) },
+                            )
+                            if (!historyMode && laps.isNotEmpty()) DropdownMenuItem(
+                                text = { Text("Clear session", fontSize = 14.sp) },
+                                onClick = { open = false; selected = null; viewModel.clearLaps() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("AI race engineer ›", fontSize = 14.sp) },
+                                onClick = { open = false; openEngineer() },
+                            )
+                        }
+                    }
+                } else {
+                    Pill(if (historyMode) "‹ SESSION" else "HISTORY (${history.size})",
+                        onClick = { historyMode = !historyMode })
+                    Spacer(Modifier.width(6.dp))
+                    if (shown != null) {
+                        Pill("CSV", onClick = { viewModel.exportCsv(shown) })
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    if (!historyMode && laps.isNotEmpty()) {
+                        Pill("CLEAR", onClick = { selected = null; viewModel.clearLaps() })
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Pill("AI ENGINEER ›", accent = true, onClick = openEngineer)
                 }
             }
-            Spacer(Modifier.weight(1f))
-            Pill(if (historyMode) "‹ SESSION" else "HISTORY (${history.size})",
-                onClick = { historyMode = !historyMode })
-            Spacer(Modifier.width(6.dp))
-            if (shown != null) {
-                Pill("CSV", onClick = { viewModel.exportCsv(shown) })
-                Spacer(Modifier.width(6.dp))
-            }
-            if (!historyMode && laps.isNotEmpty()) {
-                Pill("CLEAR", onClick = { selected = null; viewModel.clearLaps() })
-                Spacer(Modifier.width(6.dp))
-            }
-            Pill("AI ENGINEER ›", accent = true, onClick = onOpenEngineer)
         }
         Spacer(Modifier.height(10.dp))
 
@@ -162,6 +207,7 @@ fun LoggerScreen(
                 BoxWithConstraints(Modifier.weight(1f)) {
                     val landscape = maxWidth > maxHeight
                     val onPick: (com.gt7telemetry.logger.LapStore.StoredLapMeta) -> Unit = { meta ->
+                        historyMeta = meta
                         viewModel.loadStoredLap(meta) { historyLap = it }
                     }
                     if (landscape) Row(Modifier.fillMaxSize()) {

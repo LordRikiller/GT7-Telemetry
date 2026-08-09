@@ -53,7 +53,9 @@ fun EngineerScreen(
     onBack: () -> Unit,
     onOpenLogger: () -> Unit,
 ) {
-    val laps by LapRecorder.laps.collectAsStateWithLifecycle()
+    val liveLaps by LapRecorder.laps.collectAsStateWithLifecycle()
+    val source by viewModel.engineerSource.collectAsStateWithLifecycle()
+    val laps = source?.laps ?: liveLaps
     val provider by viewModel.engineerProvider.collectAsStateWithLifecycle()
     val apiKey by viewModel.engineerApiKey.collectAsStateWithLifecycle()
     val model by viewModel.engineerModel.collectAsStateWithLifecycle()
@@ -82,7 +84,7 @@ fun EngineerScreen(
             // ---- Session state --------------------------------------------
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
-                    Label("SESSION")
+                    Label(if (source != null) "STORED SESSION — FROM LAP HISTORY" else "SESSION")
                     Spacer(Modifier.height(6.dp))
                     if (!ready) {
                         Text("No laps recorded yet — complete a few laps first. The logger " +
@@ -90,10 +92,15 @@ fun EngineerScreen(
                             color = Palette.InkDim, fontSize = 13.sp)
                     } else {
                         Text(
-                            "${laps.size} lap${if (laps.size == 1) "" else "s"} recorded" +
+                            (source?.let { "${it.label} · " } ?: "") +
+                                "${laps.size} lap${if (laps.size == 1) "" else "s"}" +
                                 (best?.let { " · best ${Fmt.lap(it.lapTimeS)} (lap ${it.lapNumber})" } ?: ""),
                             color = Palette.Ink, fontSize = 13.sp,
                         )
+                    }
+                    if (source != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Pill("USE LIVE SESSION INSTEAD") { viewModel.useLiveSession() }
                     }
                 }
             }

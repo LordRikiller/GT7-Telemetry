@@ -83,10 +83,6 @@ fun DashboardScreen(
             pkt = status.packetsPerSec,
             carName = carName,
             layoutLabel = if (dashMode == DashMode.AUTO) "${layout.label} · auto" else layout.label,
-            useMph = useMph,
-            useFahrenheit = useFahrenheit,
-            onToggleSpeed = { viewModel.setUseMph(!useMph) },
-            onToggleTemp = { viewModel.setUseFahrenheit(!useFahrenheit) },
             onOpenSettings = onOpenSettings,
             onOpenLogger = onOpenLogger,
             onOpenEngineer = onOpenEngineer,
@@ -159,19 +155,16 @@ private fun TopBar(
     pkt: Int,
     carName: String?,
     layoutLabel: String,
-    useMph: Boolean,
-    useFahrenheit: Boolean,
-    onToggleSpeed: () -> Unit,
-    onToggleTemp: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenLogger: () -> Unit,
     onOpenEngineer: () -> Unit,
     onOpenSetup: () -> Unit,
 ) {
-    // Six inline pills never fit next to a car name on a phone-width bar —
-    // below this width the actions collapse into one ☰ menu.
+    // Four inline pills never fit next to a car name on a phone-width bar —
+    // below this width the actions collapse into one ☰ menu. (Units moved
+    // to Settings; they don't need dash-bar real estate.)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val compact = maxWidth < 620.dp
+        val compact = maxWidth < 520.dp
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             val (txt, col) = when {
                 status.live && raceOn -> "LIVE" to theme.good
@@ -206,8 +199,6 @@ private fun TopBar(
                         MenuEntry("Data logger") { open = false; onOpenLogger() }
                         MenuEntry("Tuning / setup") { open = false; onOpenSetup() }
                         MenuEntry("AI race engineer") { open = false; onOpenEngineer() }
-                        MenuEntry("Speed: ${if (useMph) "mph" else "km/h"}  ›  ${if (useMph) "km/h" else "mph"}") { onToggleSpeed() }
-                        MenuEntry("Temps: ${if (useFahrenheit) "°F" else "°C"}  ›  ${if (useFahrenheit) "°C" else "°F"}") { onToggleTemp() }
                         MenuEntry("Settings") { open = false; onOpenSettings() }
                     }
                 }
@@ -217,10 +208,6 @@ private fun TopBar(
                 Toggle("TUNE", theme, onOpenSetup)
                 Spacer(Modifier.width(6.dp))
                 Toggle("AI", theme, onOpenEngineer)
-                Spacer(Modifier.width(6.dp))
-                Toggle(if (useMph) "mph" else "km/h", theme, onToggleSpeed)
-                Spacer(Modifier.width(6.dp))
-                Toggle(if (useFahrenheit) "°F" else "°C", theme, onToggleTemp)
                 Spacer(Modifier.width(6.dp))
                 Toggle("⚙", theme, onOpenSettings)
             }
