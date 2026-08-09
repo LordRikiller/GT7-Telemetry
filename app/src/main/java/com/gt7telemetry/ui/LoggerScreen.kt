@@ -21,9 +21,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +54,7 @@ import com.gt7telemetry.car.CarCatalog
 import com.gt7telemetry.logger.LapRecorder
 import com.gt7telemetry.logger.LapStore
 import com.gt7telemetry.logger.RecordedLap
+import com.gt7telemetry.track.TrackStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -214,12 +218,12 @@ fun LoggerScreen(
                         HistoryList(history, historyLap, viewModel,
                             Modifier.width(300.dp).fillMaxHeight(), onPick)
                         Spacer(Modifier.width(10.dp))
-                        historyLap?.let { LapDetail(it, null, landscape = true, Modifier.weight(1f)) }
+                        historyLap?.let { LapDetail(it, null, landscape = true, viewModel, Modifier.weight(1f)) }
                     } else Column(Modifier.fillMaxSize()) {
                         HistoryList(history, historyLap, viewModel,
                             Modifier.fillMaxWidth().height(170.dp), onPick)
                         Spacer(Modifier.height(10.dp))
-                        historyLap?.let { LapDetail(it, null, landscape = false, Modifier.weight(1f)) }
+                        historyLap?.let { LapDetail(it, null, landscape = false, viewModel, Modifier.weight(1f)) }
                     }
                 }
             }
@@ -243,11 +247,11 @@ fun LoggerScreen(
                 if (landscape) Row(Modifier.fillMaxSize()) {
                     LapList(laps, best, shown, Modifier.width(230.dp).fillMaxHeight()) { selected = it }
                     Spacer(Modifier.width(10.dp))
-                    shown?.let { LapDetail(it, best, landscape = true, Modifier.weight(1f)) }
+                    shown?.let { LapDetail(it, best, landscape = true, viewModel, Modifier.weight(1f)) }
                 } else Column(Modifier.fillMaxSize()) {
                     LapList(laps, best, shown, Modifier.fillMaxWidth().height(120.dp)) { selected = it }
                     Spacer(Modifier.height(10.dp))
-                    shown?.let { LapDetail(it, best, landscape = false, Modifier.weight(1f)) }
+                    shown?.let { LapDetail(it, best, landscape = false, viewModel, Modifier.weight(1f)) }
                 }
             }
         }
@@ -423,7 +427,7 @@ private fun HistoryList(
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun LapDetail(lap: RecordedLap, best: RecordedLap?, landscape: Boolean, modifier: Modifier) {
+private fun LapDetail(lap: RecordedLap, best: RecordedLap?, landscape: Boolean, viewModel: DashboardViewModel, modifier: Modifier) {
     if (landscape) Row(modifier) {
         Card(Modifier.weight(0.42f).fillMaxHeight()) {
             Column(Modifier.padding(10.dp)) {
@@ -434,6 +438,8 @@ private fun LapDetail(lap: RecordedLap, best: RecordedLap?, landscape: Boolean, 
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(0.58f).fillMaxHeight()) {
+            TrackCard(lap, viewModel)
+            Spacer(Modifier.height(10.dp))
             StatsRow(lap, best)
             Spacer(Modifier.height(10.dp))
             Card(Modifier.fillMaxSize()) {
@@ -445,6 +451,8 @@ private fun LapDetail(lap: RecordedLap, best: RecordedLap?, landscape: Boolean, 
             }
         }
     } else Column(modifier.verticalScroll(rememberScrollState())) {
+        TrackCard(lap, viewModel)
+        Spacer(Modifier.height(10.dp))
         StatsRow(lap, best)
         Spacer(Modifier.height(10.dp))
         Card(Modifier.fillMaxWidth()) {
@@ -463,6 +471,66 @@ private fun LapDetail(lap: RecordedLap, best: RecordedLap?, landscape: Boolean, 
             }
         }
         Spacer(Modifier.height(10.dp))
+    }
+}
+
+/**
+ * Track identity + measured geometry. GT7 never broadcasts the track name,
+ * so the driver names it once and the fingerprint (start-line position +
+ * measured length) recognises it on every later lap, live or from history.
+ */
+@Composable
+private fun TrackCard(lap: RecordedLap, viewModel: DashboardViewModel) {
+    val trackRevision by viewModel.trackRevision.collectAsStateWithLifecycle()
+    val trackName = remember(lap, trackRevision) { TrackStore.identify(lap) }
+    var naming by remember { mutableStateOf(false) }
+
+    Card(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(trackName ?: "Unknown track",
+                    color = if (trackName != null) Palette.Paint else Palette.InkDim,
+                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                val geo = buildString {
+                    append("${Fmt.n2(lap.trackLengthM / 1000.0)} km measured")
+                    lap.elevationRangeM?.takeIf { it > 0.5 }?.let { append(" · ${Fmt.n0(it)} m elevation") }
+                }
+                Text(geo, color = Palette.InkMute, fontSize = 11.sp)
+            }
+            Pill(if (trackName == null) "NAME TRACK" else "✎ RENAME", accent = trackName == null) { naming = true }
+        }
+    }
+
+    if (naming) {
+        var draft by remember { mutableStateOf(trackName ?: "") }
+        AlertDialog(
+            onDismissRequest = { naming = false },
+            title = { Text("Name this track") },
+            text = {
+                Column {
+                    Text(
+                        "GT7 doesn't broadcast the track name. Name it once — the app " +
+                            "recognises it automatically from now on (start-line position + lap length).",
+                        fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        singleLine = true,
+                        label = { Text("Track name") },
+                        placeholder = { Text("e.g. Suzuka Circuit") },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.nameTrack(draft, lap); naming = false },
+                    enabled = draft.isNotBlank(),
+                ) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { naming = false }) { Text("Cancel") } },
+        )
     }
 }
 

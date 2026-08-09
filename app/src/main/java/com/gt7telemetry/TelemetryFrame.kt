@@ -79,6 +79,7 @@ object Packet {
         if (b.getInt(0x00) != MAGIC) return null
 
         val posX = b.getFloat(0x04).toDouble()
+        val posY = b.getFloat(0x08).toDouble() // world height — elevation
         val posZ = b.getFloat(0x0C).toDouble()
         val rpm = b.getFloat(0x3C).toDouble()
         val fuelLevel = b.getFloat(0x44).toDouble()
@@ -186,6 +187,7 @@ object Packet {
             totalLaps = totalLaps,
             racePosition = preRacePosition,
             posX = posX,
+            posY = posY,
             posZ = posZ,
             carOrdinal = carCode,
             yawRateRadS = yawRate,
@@ -248,6 +250,8 @@ data class Frame(
     val totalLaps: Int,
     val racePosition: Int,
     val posX: Double,
+    /** World height (metres) — the elevation channel. */
+    val posY: Double = 0.0,
     val posZ: Double,
     val carOrdinal: Int,
     // ---- Chassis / driver-input channels (v0.5, feed the data logger) ----

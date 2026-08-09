@@ -37,6 +37,8 @@ class RecordedLap(
     val gear: FloatArray,
     val posX: FloatArray,
     val posZ: FloatArray,
+    /** World height per sample, metres (elevation). Empty on laps stored before v0.10. */
+    val posY: FloatArray = FloatArray(0),
     /** Lateral acceleration in g (yaw rate × speed), signed. */
     val latG: FloatArray,
     /** Longitudinal acceleration in g (Δspeed), + = accel, − = braking. */
@@ -63,6 +65,39 @@ class RecordedLap(
     val maxBrakingG: Double by lazy { (0 until sampleCount).maxOfOrNull { (-longG[it]).toDouble() } ?: 0.0 }
     val hasSteering: Boolean by lazy { (0 until sampleCount).any { !steerDeg[it].isNaN() } }
     val hasTyreTemps: Boolean get() = tyreFL.size == sampleCount && sampleCount > 0
+    val hasElevation: Boolean get() = posY.size == sampleCount && sampleCount > 0
+
+    /** Driven path length in metres, integrated from the position trace. */
+    val trackLengthM: Double by lazy {
+        var d = 0.0
+        for (i in 1 until sampleCount) {
+            val dx = (posX[i] - posX[i - 1]).toDouble()
+            val dz = (posZ[i] - posZ[i - 1]).toDouble()
+            d += kotlin.math.sqrt(dx * dx + dz * dz)
+        }
+        // Close the loop across the start line (the trace starts just after
+        // it and ends just before) — but never bridge a teleport.
+        if (sampleCount > 1) {
+            val dx = (posX[0] - posX[sampleCount - 1]).toDouble()
+            val dz = (posZ[0] - posZ[sampleCount - 1]).toDouble()
+            val gap = kotlin.math.sqrt(dx * dx + dz * dz)
+            if (gap < 120.0) d += gap
+        }
+        d
+    }
+
+    /** Total rise from the track's lowest to highest point, metres (null pre-v0.10). */
+    val elevationRangeM: Double? by lazy {
+        if (!hasElevation) return@lazy null
+        var lo = Float.MAX_VALUE; var hi = -Float.MAX_VALUE
+        for (i in 0 until sampleCount) {
+            val y = posY[i]
+            if (y.isNaN()) return@lazy null
+            if (y < lo) lo = y
+            if (y > hi) hi = y
+        }
+        (hi - lo).toDouble()
+    }
 
     /** Mean front / rear tyre temperature over the lap, °C (null without temps). */
     val avgTyreTempF: Double? by lazy { avgOf(tyreFL, tyreFR) }
@@ -223,6 +258,7 @@ object LapRecorder {
         private var rpm = FloatArray(cap)
         private var gear = FloatArray(cap)
         private var px = FloatArray(cap)
+        private var py = FloatArray(cap)
         private var pz = FloatArray(cap)
         private var lat = FloatArray(cap)
         private var lon = FloatArray(cap)
@@ -242,6 +278,7 @@ object LapRecorder {
             rpm[size] = f.rpm.toFloat()
             gear[size] = f.gear.toFloat()
             px[size] = f.posX.toFloat()
+            py[size] = f.posY.toFloat()
             pz[size] = f.posZ.toFloat()
             lat[size] = latG.toFloat()
             lon[size] = longG.toFloat()
@@ -257,7 +294,7 @@ object LapRecorder {
             cap = max(cap * 2, 8192)
             t = t.copyOf(cap); speed = speed.copyOf(cap); thr = thr.copyOf(cap)
             brk = brk.copyOf(cap); steer = steer.copyOf(cap); rpm = rpm.copyOf(cap)
-            gear = gear.copyOf(cap); px = px.copyOf(cap); pz = pz.copyOf(cap)
+            gear = gear.copyOf(cap); px = px.copyOf(cap); py = py.copyOf(cap); pz = pz.copyOf(cap)
             lat = lat.copyOf(cap); lon = lon.copyOf(cap); clu = clu.copyOf(cap)
             tFL = tFL.copyOf(cap); tFR = tFR.copyOf(cap); tRL = tRL.copyOf(cap); tRR = tRR.copyOf(cap)
         }
@@ -277,6 +314,7 @@ object LapRecorder {
             rpm = rpm.copyOf(size),
             gear = gear.copyOf(size),
             posX = px.copyOf(size),
+            posY = py.copyOf(size),
             posZ = pz.copyOf(size),
             latG = lat.copyOf(size),
             longG = lon.copyOf(size),

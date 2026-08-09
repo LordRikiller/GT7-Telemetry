@@ -25,6 +25,7 @@ object Briefing {
         setupNotes: String,
         measured: MeasuredSetup? = null,
         sheet: SetupSheet? = null,
+        trackName: String? = null,
     ): String = buildString {
         val best = laps.filter { it.lapTimeS > 0 }.minByOrNull { it.lapTimeS } ?: laps.lastOrNull()
 
@@ -44,6 +45,15 @@ object Briefing {
         appendLine("- Tyres (driver-declared): ${tyres ?: "not declared"}")
         appendLine("  (GT7 broadcasts neither the tyre compound nor tyre wear — compound is the")
         appendLine("  driver's declaration; tyre temperatures below are measured.)")
+        appendLine()
+        appendLine("## Track")
+        appendLine("- ${trackName ?: "Not identified (GT7 doesn't broadcast the track name)"}")
+        best?.takeIf { it.trackLengthM > 100 }?.let { b ->
+            appendLine("- Measured lap length: ${"%.3f".fmt(b.trackLengthM / 1000.0)} km (integrated from the driven line)")
+            b.elevationRangeM?.takeIf { it > 0.5 }?.let {
+                appendLine("- Elevation change over a lap: ${"%.0f".fmt(it)} m between the lowest and highest point")
+            }
+        }
         appendLine()
         if (sheet != null) {
             appendLine("## Setup sheet (driver-declared, structured)")
