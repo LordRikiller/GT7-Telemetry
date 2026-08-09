@@ -97,6 +97,43 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _engineerState = MutableStateFlow<EngineerState>(EngineerState.Idle)
     val engineerState: StateFlow<EngineerState> = _engineerState.asStateFlow()
 
+    /** Laps handed to the engineer from lap history. Null = live session. */
+    data class EngineerSource(val laps: List<RecordedLap>, val label: String)
+
+    private val _engineerSource = MutableStateFlow<EngineerSource?>(null)
+    val engineerSource: StateFlow<EngineerSource?> = _engineerSource.asStateFlow()
+
+    /**
+     * Point the engineer at a stored lap's whole session: every stored lap of
+     * the same car recorded within ±3 h of the picked one (capped at the 30
+     * most recent so the briefing stays bounded). Calls [onReady] once loaded.
+     */
+    fun openEngineerWithStored(meta: LapStore.StoredLapMeta, onReady: () -> Unit) {
+        viewModelScope.launch {
+            val laps = withContext(Dispatchers.IO) {
+                LapStore.entries.value
+                    .filter {
+                        it.carOrdinal == meta.carOrdinal &&
+                            kotlin.math.abs(it.recordedAtMs - meta.recordedAtMs) < 3 * 3600_000L
+                    }
+                    .sortedBy { it.recordedAtMs }
+                    .takeLast(30)
+                    .mapNotNull { LapStore.load(it) }
+            }
+            if (laps.isNotEmpty()) {
+                val car = CarCatalog.lookup(meta.carOrdinal)?.name
+                    ?: meta.carOrdinal.takeIf { it != 0 }?.let { "Car #$it" } ?: "Unknown car"
+                val date = java.text.SimpleDateFormat("d MMM · HH:mm", java.util.Locale.getDefault())
+                    .format(java.util.Date(meta.recordedAtMs))
+                _engineerSource.value = EngineerSource(laps, "$car · $date")
+            }
+            onReady()
+        }
+    }
+
+    /** Back to analysing the live session's laps. */
+    fun useLiveSession() { _engineerSource.value = null }
+
     /** Build the shareable/analysable briefing text for the current session. */
     fun buildBriefing(laps: List<RecordedLap>): String {
         val ordinal = laps.lastOrNull()?.carOrdinal
