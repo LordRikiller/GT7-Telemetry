@@ -159,8 +159,9 @@ fun EngineerScreen(
                     Label("BUILT-IN ENGINEER — YOUR OWN API KEY")
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "One analysis = one capped request (≈15k tokens in, 1.5k out): a few " +
-                            "cents on Claude, free within Gemini's free tier. There is no " +
+                        "One analysis = one capped request (≈15k tokens in, ≤16k out — " +
+                            "usually well under US\$0.25 on Claude, free within Gemini's free " +
+                            "tier). There is no " +
                             "background usage and no loop — it never calls the API except when " +
                             "you press Analyse. The key stays on this phone.",
                         color = Palette.InkDim, fontSize = 12.sp,

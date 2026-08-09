@@ -22,18 +22,21 @@ import java.net.URL
  *  - the response is hard-capped at [MAX_OUTPUT_TOKENS];
  *  - the briefing itself is bounded by [Briefing.MAX_TRACE_ROWS].
  *
- * One analysis is therefore a few thousand input tokens + ≤1500 output
- * tokens — a few cents on Claude, free within Gemini's free tier. The key
- * is the user's own, entered in Settings and stored only on-device.
+ * One analysis is therefore a few thousand input tokens + ≤[MAX_OUTPUT_TOKENS]
+ * output tokens (thinking included) — cents on Claude, free within Gemini's
+ * free tier. The key is the user's own, entered in Settings and stored only
+ * on-device.
  */
 object EngineerClient {
 
     // Claude 5-family models think by default, and max_tokens caps
     // thinking + visible text TOGETHER — a tight cap gets eaten by the
-    // thinking and yields an empty report. 4096 leaves room for both while
-    // still bounding a single analysis to a few cents.
-    private const val MAX_OUTPUT_TOKENS = 4096
-    private const val TIMEOUT_MS = 120_000
+    // thinking and yields an empty report. On a full telemetry briefing the
+    // thinking alone has been observed to exceed 4096, so the cap must leave
+    // real headroom: 16384 worst-cases a single analysis at ~US$0.25 on
+    // Sonnet while typical runs stay well under that.
+    private const val MAX_OUTPUT_TOKENS = 16_384
+    private const val TIMEOUT_MS = 180_000
 
     private val json = Json { ignoreUnknownKeys = true }
 
