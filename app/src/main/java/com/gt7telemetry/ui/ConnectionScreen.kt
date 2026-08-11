@@ -37,6 +37,39 @@ import com.gt7telemetry.TelemetryRepository
 import com.gt7telemetry.TelemetryService
 
 /**
+ * True while any VPN is up on this phone. A VPN is the classic silent killer
+ * of GT7 telemetry: the heartbeat leaves through the tunnel (so the console
+ * never sees it) or the 60 Hz UDP return stream gets dropped — so we call it
+ * out instead of showing an unexplained "no packets".
+ */
+@Composable
+internal fun rememberVpnActive(): Boolean {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var active by remember { mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+            as android.net.ConnectivityManager
+        val vpns = java.util.Collections.synchronizedSet(mutableSetOf<android.net.Network>())
+        val cb = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                vpns.add(network); active = vpns.isNotEmpty()
+            }
+            override fun onLost(network: android.net.Network) {
+                vpns.remove(network); active = vpns.isNotEmpty()
+            }
+        }
+        // Default requests exclude VPNs — ask for them explicitly.
+        val req = android.net.NetworkRequest.Builder()
+            .addTransportType(android.net.NetworkCapabilities.TRANSPORT_VPN)
+            .removeCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        cm.registerNetworkCallback(req, cb)
+        onDispose { cm.unregisterNetworkCallback(cb) }
+    }
+    return active
+}
+
+/**
  * The PlayStation connection page: live link status, the console's IP, the
  * how-to steps, and the legacy-packet escape hatch. Reachable from Settings
  * and from the home screen's connection card.
@@ -46,6 +79,7 @@ fun ConnectionScreen(viewModel: DashboardViewModel, onBack: () -> Unit) {
     val ps5Ip by viewModel.ps5Ip.collectAsStateWithLifecycle()
     val legacyPacket by viewModel.legacyPacket.collectAsStateWithLifecycle()
     val status by TelemetryRepository.status.collectAsStateWithLifecycle()
+    val vpnActive = rememberVpnActive()
 
     Column(
         Modifier.fillMaxSize().background(Palette.Asphalt).systemBarsPadding()
@@ -83,6 +117,21 @@ fun ConnectionScreen(viewModel: DashboardViewModel, onBack: () -> Unit) {
                         (if (status.extendedPacket) "extended '~' format (steering available)"
                         else "legacy format — no steering channel"),
                         color = Palette.InkDim, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                } else if (status.everReceived && status.lastPacketAgeMs != Long.MAX_VALUE) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Last packet received ${Fmt.age(status.lastPacketAgeMs)} ago",
+                        color = Palette.InkDim, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                }
+                if (vpnActive) {
+                    Spacer(Modifier.height(8.dp))
+                    Box(Modifier.clip(RoundedCornerShape(8.dp))
+                        .background(Palette.Over.copy(alpha = 0.14f)).padding(10.dp)) {
+                        Text(
+                            "VPN ACTIVE ON THIS PHONE — VPNs usually block GT7's local UDP " +
+                                "stream. Pause the VPN (or exempt this app from it) to receive telemetry.",
+                            color = Palette.Over, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                 }
             }
         }
