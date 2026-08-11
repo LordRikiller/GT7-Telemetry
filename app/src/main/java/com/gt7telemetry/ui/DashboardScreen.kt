@@ -340,10 +340,12 @@ private fun HomeContent(
         Spacer(Modifier.height(10.dp))
 
         // Connection status strip — the details live on their own page now.
+        val vpnActive = rememberVpnActive()
         Card(Modifier.fillMaxWidth()) {
             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 val (txt, col) = when {
                     status.live -> "Connected — receiving telemetry" to Palette.Good
+                    vpnActive -> "VPN active — it usually blocks GT7's telemetry" to Palette.Over
                     status.everReceived -> "Connection lost — is GT7 running?" to Palette.Hot
                     ps5Ip.isBlank() -> "No PS5 configured yet" to Palette.InkMute
                     else -> "Waiting for $ps5Ip — start GT7 and drive" to Palette.InkDim

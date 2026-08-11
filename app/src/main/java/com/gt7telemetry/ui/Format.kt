@@ -27,6 +27,13 @@ object Fmt {
     fun n1(v: Double): String = "%.1f".format(v)
     fun n2(v: Double): String = "%.2f".format(v)
 
+    /** Milliseconds -> "42 s" / "7 min" / "3 h" — for "last packet N ago". */
+    fun age(ms: Long): String = when {
+        ms < 60_000 -> "${ms / 1000} s"
+        ms < 3_600_000 -> "${ms / 60_000} min"
+        else -> "${ms / 3_600_000} h"
+    }
+
     // Tyre temperature is shown as raw °C/°F only — matching the FH6 app's
     // no-verdict presentation (its working-window colouring was removed after
     // testing showed no verified temperature→grip coupling to display).
